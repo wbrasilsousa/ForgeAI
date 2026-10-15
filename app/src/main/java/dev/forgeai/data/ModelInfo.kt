@@ -1,0 +1,118 @@
+package dev.forgeai.data
+
+import org.json.JSONObject
+
+/**
+ * A GGUF model present in the models directory.
+ */
+data class ModelInfo(
+    val fileName: String,
+    val path: String,
+    val sizeBytes: Long,
+    val partCount: Int = 1,
+    // metadata (filled after inspection)
+    val name: String? = null,
+    val arch: String? = null,
+    val quant: String? = null,
+    val params: Long? = null,
+    val nCtxTrain: Long? = null,
+    val nLayer: Int? = null,
+    val nEmbd: Int? = null,
+    val nVocab: Int? = null,
+    val nTensors: Int? = null,
+    val tokenizer: String? = null,
+    val chatTemplate: String? = null,
+    /** Caminho do encoder de imagens (mmproj-*.gguf) encontrado ao lado do modelo. */
+    val mmprojPath: String? = null,
+    val metaLoaded: Boolean = false,
+    val isLoaded: Boolean = false,
+) {
+    /** True quando o template do modelo tem suporte nativo a tools (formato Qwen2.5). */
+    val supportsTools: Boolean get() = ToolSupport.templateSupportsTools(chatTemplate)
+
+    /** True quando o modelo tem um encoder de visão (mmproj) disponível em disco. */
+    val supportsVision: Boolean get() = mmprojPath != null
+
+    val displayName: String
+        get() = name?.takeUnless { it.isHashLike() }
+            ?: HfResolver.baseName(fileName).removeSuffix(".gguf").replace('_', ' ')
+
+    val displayParams: String
+        get() = params?.let { formatParams(it) } ?: "—"
+
+    val displayQuant: String
+        get() = quant?.takeIf { it.isNotBlank() } ?: "GGUF"
+
+    val sizeLabel: String
+        get() = formatBytes(sizeBytes)
+
+    companion object {
+        /** Nomes tipo hash (ex.: o general.name dos modelos LFM é um SHA-1 hex). */
+        private val HASH_LIKE = Regex("^[0-9a-fA-F]{32,}$")
+
+        /**
+         * Nome base sem prefixo mmproj- e sem sufixo de quantização — usado
+         * para casar o encoder de visão com o modelo principal.
+         *   "mmproj-LFM2.5-VL-3B-Q8_0.gguf" -> "LFM2.5-VL-3B"
+         *   "LFM2.5-VL-3B-Q4_K_M.gguf"      -> "LFM2.5-VL-3B"
+         */
+        fun visionBase(fileName: String): String {
+            var name = HfResolver.baseName(fileName).removeSuffix(".gguf")
+            if (name.startsWith("mmproj-", ignoreCase = true)) name = name.drop("mmproj-".length)
+            val quant = HfResolver.quantFromName(name)
+            if (quant != null && name.contains("-$quant", ignoreCase = true)) {
+                name = name.substringBeforeLast("-$quant")
+            }
+            return name
+        }
+
+        fun String.isHashLike(): Boolean = HASH_LIKE.matches(this)
+
+        fun formatParams(n: Long): String {
+            val b = n.toDouble()
+            return when {
+                b >= 1e9 -> String.format("%.1fB", b / 1e9)
+                b >= 1e6 -> String.format("%.1fM", b / 1e6)
+                else -> n.toString()
+            }
+        }
+
+        fun formatBytes(bytes: Long): String {
+            val b = bytes.toDouble()
+            return when {
+                b >= 1e9 -> String.format("%.2f GB", b / 1e9)
+                b >= 1e6 -> String.format("%.1f MB", b / 1e6)
+                else -> String.format("%.0f KB", b / 1e3)
+            }
+        }
+
+        fun fromMeta(fileName: String, path: String, sizeBytes: Long, meta: JSONObject): ModelInfo {
+            fun optLong(key: String): Long? {
+                val v = meta.opt(key) ?: return null
+                return if (v is Number) v.toLong() else v.toString().toLongOrNull()
+            }
+            fun optInt(key: String): Int? {
+                val v = meta.opt(key) ?: return null
+                return if (v is Number) v.toInt() else v.toString().toIntOrNull()
+            }
+            return ModelInfo(
+                fileName = fileName,
+                path = path,
+                sizeBytes = sizeBytes,
+                partCount = meta.optInt("part_count", 1).coerceAtLeast(1),
+                name = meta.optString("name").ifBlank { null },
+                arch = meta.optString("arch").ifBlank { null },
+                quant = meta.optString("quant").ifBlank { null },
+                params = optLong("n_params") ?: optLong("params"),
+                nCtxTrain = optLong("n_ctx_train"),
+                nLayer = optInt("n_layer"),
+                nEmbd = optInt("n_embd"),
+                nVocab = optInt("n_vocab"),
+                nTensors = optInt("n_tensors"),
+                tokenizer = meta.optString("tokenizer").ifBlank { null },
+                chatTemplate = meta.optString("template").ifBlank { null },
+                metaLoaded = true,
+            )
+        }
+    }
+}
