@@ -104,10 +104,13 @@ jobs:
           SIZE="${{ github.event.inputs.size || '2B' }}"
           curl -fL --retry 2 -o test.png \
             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png"
+          # Qwen-VL precisa de >=1024 tokens de imagem (o default do mtmd é bem
+          # menor e o modelo responde lixo). É a mesma política que o app deve
+          # adotar em TD-18.
           ./llbuild/bin/llama-mtmd-cli \
             -m "models/Ternary-Bonsai-2-${SIZE}-Q2_0.gguf" \
             --mmproj "models/Ternary-Bonsai-2-${SIZE}-mmproj-Q8_0.gguf" \
-            --image test.png \
+            --image test.png --image-min-tokens 1024 \
             -p "Describe this image in one sentence." -n 32 -t 4 2>&1 | tee vision.txt
 
       - name: Report
@@ -134,5 +137,84 @@ jobs:
           path: |
             bench.txt
             vision.txt
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # O mesmo bench em ARM64 (runner público). É a medida que importa para o
+  # celular: kernels dotprod/i8mm/SVE só existem em ARM.
+  # ---------------------------------------------------------------------------
+  bench-arm:
+    runs-on: ubuntu-24.04-arm
+    continue-on-error: true
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: sudo apt-get update -q && sudo apt-get install -y -q ninja-build cmake
+
+      - name: Fetch llama.cpp
+        run: |
+          if [ ! -f "$HOME/llama.cpp/CMakeLists.txt" ]; then
+            git clone --depth 1 --branch "$LLAMA_TAG" \
+              https://github.com/ggml-org/llama.cpp.git "$HOME/llama.cpp"
+          fi
+
+      - name: Build llama-bench (ARM64)
+        run: |
+          cmake -S "$HOME/llama.cpp" -B llbuild -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_SERVER=OFF -DLLAMA_CURL=OFF -DGGML_NATIVE=ON
+          cmake --build llbuild --target llama-bench -j "$(nproc)"
+
+      - name: Cache model files
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: bonsai-arm-${{ github.event.inputs.size || '2B' }}
+
+      - name: Download models (Bonsai 2 Q2_0 + baseline Q4_K_M)
+        run: |
+          SIZE="${{ github.event.inputs.size || '2B' }}"
+          mkdir -p models
+          M="Ternary-Bonsai-2-${SIZE}-Q2_0.gguf"
+          [ -f "models/$M" ] || curl -fL --retry 3 -o "models/$M" \
+            "https://huggingface.co/prism-ml/Ternary-Bonsai-2-${SIZE}-gguf/resolve/main/$M"
+          B="qwen2.5-1.5b-instruct-q4_k_m.gguf"
+          [ -f "models/$B" ] || curl -fL --retry 3 -o "models/$B" \
+            "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/$B"
+          ls -la models
+
+      - name: llama-bench ARM (Bonsai 2 vs Q4_K_M)
+        run: |
+          SIZE="${{ github.event.inputs.size || '2B' }}"
+          ./llbuild/bin/llama-bench \
+            -m "models/Ternary-Bonsai-2-${SIZE}-Q2_0.gguf" \
+            -m models/qwen2.5-1.5b-instruct-q4_k_m.gguf \
+            -p 64 -n 32 -t 4 -r 1 2>&1 | tee bench-arm.txt
+
+      - name: Report ARM
+        if: always()
+        run: |
+          uname -m
+          grep -m1 '^Features' /proc/cpuinfo || true
+          echo '```'
+          cat bench-arm.txt 2>/dev/null || echo "bench ARM não gerado"
+          echo '```'
+          {
+            echo "## Bench ARM64 (${{ github.event.inputs.size || '2B' }})"
+            echo '```'
+            cat bench-arm.txt 2>/dev/null || echo "não gerado"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload ARM bench
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spike-bonsai-bench-arm
+          path: bench-arm.txt
           if-no-files-found: ignore
           retention-days: 30

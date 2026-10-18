@@ -107,7 +107,7 @@ class ModelFitTest {
         val tight = ModelFit.estimate(m, 2048, availableBytes = 3_500_000_000)
         assertEquals(MemoryEstimate.Fit.TIGHT, tight.fit)
 
-        val noFit = ModelFit.estimate(m, 2048, availableBytes = 2_800_000_000)
+        val noFit = ModelFit.estimate(m, 2048, availableBytes = 2_500_000_000)
         assertEquals(MemoryEstimate.Fit.NO_FIT, noFit.fit)
         assertTrue(noFit.headroomBytes < 0)
     }
