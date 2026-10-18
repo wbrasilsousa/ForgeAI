@@ -33,7 +33,9 @@ object LlamaEngine {
         nCtx: Int,
         nThreads: Int,
         nThreadsBatch: Int,
-        nGpuLayers: Int
+        nGpuLayers: Int,
+        /** Tokens de imagem do encoder de visão (Qwen-VL: mínimo 1024). */
+        imageTokens: Int
     ): Boolean
 
     /**
@@ -163,9 +165,18 @@ object LlamaEngine {
     fun inspectModel(path: String): JSONObject? =
         runCatching { nativeInspectModel(path)?.let { JSONObject(it) } }.getOrNull()
 
-    fun loadModel(path: String, mmprojPath: String?, nCtx: Int, threads: Int, gpuLayers: Int): Boolean {
+    fun loadModel(
+        path: String,
+        mmprojPath: String?,
+        nCtx: Int,
+        threads: Int,
+        gpuLayers: Int,
+        imageTokens: Int = 1024,
+    ): Boolean {
         loadProgress.value = 0f
-        val ok = nativeLoadModel(path, mmprojPath, nCtx, threads, autoBatchThreads, gpuLayers)
+        val ok = nativeLoadModel(
+            path, mmprojPath, nCtx, threads, autoBatchThreads, gpuLayers, imageTokens,
+        )
         loadProgress.value = 1f
         return ok
     }

@@ -27,11 +27,14 @@ data class MemoryEstimate(
     val kvCacheBytes: Long,
     val computeBytes: Long,
     val visionBytes: Long,
+    /** Buffers do grafo, tokenizer, fragmentação e overhead do runtime. */
+    val overheadBytes: Long,
     val availableBytes: Long,
 ) {
     enum class Fit { GOOD, TIGHT, NO_FIT }
 
-    val totalBytes: Long get() = weightsBytes + kvCacheBytes + computeBytes + visionBytes
+    val totalBytes: Long
+        get() = weightsBytes + kvCacheBytes + computeBytes + visionBytes + overheadBytes
 
     /** Folga (pode ser negativa). */
     val headroomBytes: Long get() = availableBytes - totalBytes
@@ -80,13 +83,34 @@ object ModelFit {
         availableBytes: Long,
         visionBytes: Long = 0L,
         kvBytesPerElem: Float = KV_F16,
-    ): MemoryEstimate = MemoryEstimate(
-        weightsBytes = model.sizeBytes,
-        kvCacheBytes = kvCacheBytes(model, nCtx, kvBytesPerElem),
-        computeBytes = computeBufferBytes(model),
-        visionBytes = visionBytes.coerceAtLeast(0L),
-        availableBytes = availableBytes,
-    )
+    ): MemoryEstimate {
+        val weights = model.sizeBytes
+        val kv = kvCacheBytes(model, nCtx, kvBytesPerElem)
+        val compute = computeBufferBytes(model)
+        val vision = visionBytes.coerceAtLeast(0L)
+        val base = weights + kv + compute + vision
+        return MemoryEstimate(
+            weightsBytes = weights,
+            kvCacheBytes = kv,
+            computeBytes = compute,
+            visionBytes = vision,
+            overheadBytes = overheadBytes(base),
+            availableBytes = availableBytes,
+        )
+    }
+
+    /**
+     * Overhead de runtime — calibrado no Z Fold 8: 2B PQ2_0 (517 MB) +
+     * mmproj Q8_0 (364 MB) deu pico de RSS de 1,1–1,3 GB, enquanto a soma
+     * “pesos + KV + compute” dava ~750 MB. O restante é buffer de grafo,
+     * tokenizer, alocações do ggml e fragmentação. 15% (mínimo 96 MB) cobre
+     * isso com margem sem assustar o usuário.
+     */
+    fun overheadBytes(baseBytes: Long): Long =
+        maxOf(MIN_OVERHEAD_BYTES, (baseBytes * OVERHEAD_RATIO).toLong())
+
+    private const val OVERHEAD_RATIO = 0.15f
+    private const val MIN_OVERHEAD_BYTES = 96L * 1024 * 1024
 
     /** `2 · camadas_com_kv · n_kv_heads · head_dim · n_ctx · bytes` (K + V). */
     fun kvCacheBytes(model: ModelInfo, nCtx: Int, kvBytesPerElem: Float = KV_F16): Long {

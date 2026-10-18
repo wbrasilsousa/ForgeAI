@@ -272,7 +272,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // lista `models` ainda pode estar vazia (race), o que desligava a
                 // visão silenciosamente ao recarregar o último modelo.
                 mmproj = repo.mmprojFor(path)
-                LlamaEngine.loadModel(path, mmproj, ms.nCtx, ms.threads, gpu)
+                LlamaEngine.loadModel(
+                    path, mmproj, ms.nCtx, ms.threads, gpu, ms.imageTokens,
+                )
             }
             if (ok) {
                 engineStatus = EngineStatus.Ready
@@ -413,16 +415,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
                 out.outputStream().use { input.copyTo(it) }
             }
-            // Imagens acima de ~1024px disparam o tiling do SigLIP2/LFM2 (até 10
-            // tiles de 512px) e a codificação em CPU fica lenta o bastante para
-            // parecer um travamento. Mantendo o lado maior <= 1024px o encoder
-            // processa UMA imagem só, o que é bem mais rápido no celular.
-            downscaleIfNeeded(out, maxDim = 1024)
+            // Imagens acima do alvo disparam o tiling do encoder e a codificação
+            // em CPU fica lenta o bastante para parecer travamento. O alvo
+            // acompanha a qualidade escolhida (imageTokens): 512 tok -> 768 px,
+            // 1024 -> 1024 px, 1536+ -> 1280 px.
+            downscaleIfNeeded(out, maxDim = maxDimForImageTokens(modelSettings.imageTokens))
             if (out.exists() && out.length() > 0) out.absolutePath else null
         } catch (e: Exception) {
             runCatching { out.delete() }
             null
         }
+    }
+
+    /** Mapeia a qualidade da imagem (tokens do encoder) para o lado máximo em px. */
+    private fun maxDimForImageTokens(tokens: Int): Int = when {
+        tokens <= 512 -> 768
+        tokens <= 1024 -> 1024
+        else -> 1280
     }
 
     /** Reamostra a imagem em disco quando o lado maior excede [maxDim]. */
@@ -1052,8 +1061,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.saveModelSettings(path, new)
         if (loadedModel?.path == path) {
             modelSettings = new
-            if (prev.nCtx != new.nCtx || prev.threads != new.threads || prev.gpuLayers != new.gpuLayers) {
-                showSnack("Parâmetros de memória mudaram — recarregue o modelo para aplicar")
+            if (prev.nCtx != new.nCtx || prev.threads != new.threads ||
+                prev.gpuLayers != new.gpuLayers || prev.imageTokens != new.imageTokens
+            ) {
+                showSnack("Parâmetros de memória/visão mudaram — recarregue o modelo para aplicar")
             }
         }
     }

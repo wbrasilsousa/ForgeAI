@@ -23,6 +23,12 @@ data class ModelSettings(
     val nCtx: Int = 2048,
     val threads: Int = 4,
     val gpuLayers: Int = 0,
+    /**
+     * Tokens de imagem que o encoder de visão produz (Qwen-VL precisa de
+     * >=1024 para não alucinar; 512 é mais rápido e esquenta menos; 2048 dá
+     * mais detalhe para OCR). Só se aplica a modelos com mmproj.
+     */
+    val imageTokens: Int = 1024,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("temperature", temperature)
@@ -36,6 +42,7 @@ data class ModelSettings(
         put("nCtx", nCtx)
         put("threads", threads)
         put("gpuLayers", gpuLayers)
+        put("imageTokens", imageTokens)
     }
 
     companion object {
@@ -51,6 +58,7 @@ data class ModelSettings(
             nCtx = o.optInt("nCtx", 2048),
             threads = o.optInt("threads", 4),
             gpuLayers = o.optInt("gpuLayers", 0),
+            imageTokens = o.optInt("imageTokens", 1024),
         )
     }
 }

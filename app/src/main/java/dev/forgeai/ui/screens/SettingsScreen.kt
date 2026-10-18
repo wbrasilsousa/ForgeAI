@@ -405,6 +405,18 @@ private fun ModelSettingsPage(
                     format = { it.toInt().toString() },
                     onChange = { update(ms.copy(threads = it.toInt())) },
                 )
+                // Só faz sentido para modelos com encoder de visão.
+                if (selModel?.mmprojPath != null) {
+                    SettingSlider(
+                        title = "Detalhe da imagem",
+                        subtitle = "Tokens do encoder visual · 512 = rápido/quente menos · 1024 = padrão · 1536+ = OCR",
+                        value = ms.imageTokens.toFloat(),
+                        range = 512f..2048f,
+                        steps = 2,
+                        format = { "${it.toInt()} tok" },
+                        onChange = { update(ms.copy(imageTokens = it.toInt())) },
+                    )
+                }
                 if (vm.vulkanAvailable) {
                     SettingSlider(
                         title = "Camadas na GPU (Vulkan)",
@@ -420,7 +432,7 @@ private fun ModelSettingsPage(
                     Icon(Icons.Filled.Memory, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        "Alterações de contexto/threads/GPU valem ao recarregar o modelo.",
+                        "Alterações de contexto/threads/GPU/visão valem ao recarregar o modelo.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -21,7 +21,28 @@ android {
         }
     }
 
+    signingConfigs {
+        create("forgeDebug") {
+            val debugKs = rootProject.file("keystore/debug.keystore")
+            if (debugKs.exists()) {
+                storeFile = debugKs
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            // Keystore fixa versionada no repo: garante a MESMA assinatura em
+            // todo build (update por cima sem desinstalar). É uma chave de
+            // debug — pública por definição, nunca use para release.
+            val debugKs = rootProject.file("keystore/debug.keystore")
+            if (debugKs.exists()) {
+                signingConfig = signingConfigs.getByName("forgeDebug")
+            }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

@@ -434,3 +434,21 @@ velocidade ótima, conteúdo inválido; a próxima medição é com `PQ2_0` no f
 Visão (TD-18, iniciado): `image_min_tokens = 1024` para arquiteturas `qwen*` no
 `mtmd_context_params` — o campo existe na tag do fork.
 
+### 8.2 Medições no Z Fold 8 (build com fork + PQ2_0)
+
+| Cenário | tok/s | Pico RSS |
+|---|---:|---:|
+| Texto (PQ2_0, 52 prompt, 434 gerados) | **30,9** | 1,3 GB |
+| Com imagem (542 prompt, 1024 tokens de visão) | 23,4 | 1,3 GB |
+
+- Texto **coerente** após a troca para o fork. O `Q2_0` no upstream dava 26,5 tok/s
+  de lixo; o `PQ2_0` no fork dá 30,9 tok/s de resposta válida.
+- O fit badge passou a contar `mmprojBytes` + 15% de overhead de runtime
+  (calibrado por esta medição: estimava 685 MB, o real era 1,3 GB).
+- Visão: funcional (o modelo descreve a imagem), mas o 2B ternary é fraco em
+  OCR/leitura de screenshot e a codificação de 1024 tokens esquenta o aparelho.
+  Novo ajuste por modelo: **Detalhe da imagem** (512/1024/1536/2048 tokens) +
+  downscale proporcional; 4B/9B devem ser melhores para imagem.
+- Assinatura: builds consecutivos agora usam a mesma chave de debug
+  (`keystore/debug.keystore`, versionada), então o APK atualiza por cima.
+

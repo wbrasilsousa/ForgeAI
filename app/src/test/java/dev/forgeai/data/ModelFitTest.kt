@@ -87,10 +87,28 @@ class ModelFitTest {
         assertEquals(300_000_000L, est.visionBytes)
         assertTrue(est.kvCacheBytes > 0)
         assertTrue(est.computeBytes > 0)
+        assertTrue(est.overheadBytes >= 96L * 1024 * 1024)
         assertEquals(
-            est.weightsBytes + est.kvCacheBytes + est.computeBytes + est.visionBytes,
+            est.weightsBytes + est.kvCacheBytes + est.computeBytes + est.visionBytes + est.overheadBytes,
             est.totalBytes,
         )
+    }
+
+    /** Calibração medida no aparelho: 2B PQ2_0 (517 MB) + mmproj (364 MB) -> pico 1,1–1,3 GB. */
+    @Test
+    fun estimate_matchesMeasuredPeakOnDevice() {
+        val bonsai2b = ModelInfo(
+            "b.gguf", "/m/b.gguf", 517_312_992,
+            nLayer = 24, nEmbd = 2048, nHead = 16, nHeadKv = 2, nKvLayers = 6,
+            nVocab = 151_936,
+        )
+        val est = ModelFit.estimate(
+            bonsai2b, nCtx = 2048, availableBytes = 4_200_000_000, visionBytes = 364_664_352,
+        )
+        // soma de pesos+mmproj = 881 MB; com KV, compute e overhead deve ficar
+        // entre 950 MB e 1,6 GB (o medido foi 1,1–1,3 GB)
+        assertTrue("estimou ${est.totalBytes}", est.totalBytes in 950_000_000L..1_600_000_000L)
+        assertEquals(MemoryEstimate.Fit.GOOD, est.fit)
     }
 
     @Test
@@ -101,13 +119,13 @@ class ModelFitTest {
             nLayer = 36, nEmbd = 4096, nHead = 32, nHeadKv = 8, nKvLayers = 12,
             nVocab = 151_936,
         )
-        val good = ModelFit.estimate(m, 2048, availableBytes = 5_000_000_000)
+        val good = ModelFit.estimate(m, 2048, availableBytes = 6_000_000_000)
         assertEquals(MemoryEstimate.Fit.GOOD, good.fit)
 
-        val tight = ModelFit.estimate(m, 2048, availableBytes = 3_500_000_000)
+        val tight = ModelFit.estimate(m, 2048, availableBytes = 4_000_000_000)
         assertEquals(MemoryEstimate.Fit.TIGHT, tight.fit)
 
-        val noFit = ModelFit.estimate(m, 2048, availableBytes = 2_500_000_000)
+        val noFit = ModelFit.estimate(m, 2048, availableBytes = 3_000_000_000)
         assertEquals(MemoryEstimate.Fit.NO_FIT, noFit.fit)
         assertTrue(noFit.headroomBytes < 0)
     }

@@ -187,9 +187,8 @@ fun ModelsScreen(vm: AppViewModel) {
                         loading = vm.engineStatus is dev.forgeai.ui.EngineStatus.Loading,
                         availableBytes = vm.ram.availableBytes,
                         nCtx = vm.settingsFor(model.path).nCtx,
-                        visionBytes = model.mmprojPath
-                            ?.let { runCatching { java.io.File(it).length() }.getOrDefault(0L) }
-                            ?: 0L,
+                        visionBytes = if (model.mmprojBytes > 0L) model.mmprojBytes
+                        else model.mmprojPath?.let { runCatching { java.io.File(it).length() }.getOrDefault(0L) } ?: 0L,
                         onLoad = { if (model.isLoaded) vm.unloadModel() else pendingConfirm = ModelConfirm.Load(model) },
                         onDelete = { pendingConfirm = ModelConfirm.Delete(model) },
                     )

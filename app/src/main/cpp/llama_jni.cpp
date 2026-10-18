@@ -282,8 +282,11 @@ Java_dev_forgeai_LlamaEngine_nativeInit(JNIEnv * env, jobject thiz, jstring jbac
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_dev_forgeai_LlamaEngine_nativeGetSystemInfo(JNIEnv * env, jobject) {
-    const char * info = llama_print_system_info();
-    return env->NewStringUTF(info ? info : "unknown");
+    // versão + features de CPU (SVE/DOTPROD/…) — usado no "Backend" dos Ajustes
+    std::string info = std::string("llama.cpp ") + (llama_version() ? llama_version() : "?");
+    const char * sys = llama_print_system_info();
+    if (sys) { info += " | "; info += sys; }
+    return env->NewStringUTF(info.c_str());
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -471,7 +474,8 @@ static void free_model_locked() {
 extern "C" JNIEXPORT jboolean JNICALL
 Java_dev_forgeai_LlamaEngine_nativeLoadModel(
         JNIEnv * env, jobject,
-        jstring jpath, jstring jmmproj, jint n_ctx, jint n_threads, jint n_threads_batch, jint n_gpu_layers) {
+        jstring jpath, jstring jmmproj, jint n_ctx, jint n_threads, jint n_threads_batch,
+        jint n_gpu_layers, jint jimage_tokens) {
 
     if (g_generating.load()) {
         emit_error(env, "Modelo em geração. Aguarde ou pare a geração antes de trocar de modelo.");
@@ -544,7 +548,8 @@ Java_dev_forgeai_LlamaEngine_nativeLoadModel(
             char arch_buf[64] = {0};
             if (llama_model_meta_val_str(g_model, "general.architecture", arch_buf, sizeof(arch_buf)) > 0) {
                 if (strncmp(arch_buf, "qwen", 4) == 0) {
-                    mmp.image_min_tokens = 1024;
+                    // 0/negativo = manter o default do metadata
+                    mmp.image_min_tokens = jimage_tokens > 0 ? (int)jimage_tokens : 1024;
                     LOGI("mmproj: arch=%s -> image_min_tokens=%d", arch_buf, mmp.image_min_tokens);
                 }
             }

@@ -149,6 +149,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Bootstrap da keystore versionada: exporta a chave usada neste build para
+      # que ela possa ser commitada uma vez em keystore/debug.keystore. A partir
+      # daí todo build usa a chave do repositório (assinatura estável).
+      - name: Upload debug keystore (bootstrap)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-keystore
+          path: ~/.android/debug.keystore
+          if-no-files-found: ignore
+          retention-days: 1
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4

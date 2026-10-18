@@ -47,18 +47,20 @@ class ModelRepository(private val context: Context) {
         return byBase.map { (_, group) ->
             val sorted = group.sortedBy { it.name }
             val first = sorted.first()
-            val mmprojPath = mmprojs[ModelInfo.visionBase(first.name)]?.absolutePath
+            val mmprojFile = mmprojs[ModelInfo.visionBase(first.name)]
             val base = ModelInfo(
                 fileName = first.name,
                 path = first.absolutePath,
                 sizeBytes = sorted.sumOf { it.length() },
                 partCount = sorted.size,
-                mmprojPath = mmprojPath,
+                mmprojPath = mmprojFile?.absolutePath,
+                mmprojBytes = mmprojFile?.length() ?: 0L,
                 isLoaded = loaded && first.absolutePath == loadedPath,
             )
             (readMeta(base) ?: base).copy(
                 partCount = sorted.size,
-                mmprojPath = mmprojPath,
+                mmprojPath = mmprojFile?.absolutePath,
+                mmprojBytes = mmprojFile?.length() ?: 0L,
             )
         }.sortedBy { it.fileName.lowercase(Locale.ROOT) }
     }

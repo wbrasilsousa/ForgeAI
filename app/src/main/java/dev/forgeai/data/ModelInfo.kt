@@ -29,6 +29,8 @@ data class ModelInfo(
     val chatTemplate: String? = null,
     /** Caminho do encoder de imagens (mmproj-*.gguf) encontrado ao lado do modelo. */
     val mmprojPath: String? = null,
+    /** Tamanho do encoder de visão em disco — entra no fit badge (TD-25). */
+    val mmprojBytes: Long = 0L,
     val metaLoaded: Boolean = false,
     val isLoaded: Boolean = false,
 ) {
