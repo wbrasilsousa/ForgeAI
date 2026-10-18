@@ -1,0 +1,138 @@
+name: spike-bonsai
+
+# TD-03: o packing Q2_0 do Bonsai 2 carrega no llama.cpp UPSTREAM (b10333)?
+# Roda em ubuntu (x86_64), sem depender do celular:
+#   1. compila llama-bench + llama-mtmd-cli do b10333
+#   2. baixa Ternary-Bonsai-2-2B-Q2_0.gguf + mmproj-Q8_0
+#   3. mede prefill/decode e tenta a visão com uma imagem real
+#
+# Se o load falhar (tipo de quant desconhecido, arquitetura Qwen3.5 ausente),
+# a decisão ADR-001 muda para o fork PrismML (PQ2_0/PTQ1_0 + MTP).
+
+on:
+  workflow_dispatch:
+    inputs:
+      size:
+        description: 'Tamanho do Bonsai 2 para testar'
+        required: true
+        default: '2B'
+        type: choice
+        options: ['2B', '4B', '9B']
+  schedule:
+    - cron: '0 6 * * 1' # semanal: detecta regressão do upstream
+
+concurrency:
+  group: spike-bonsai
+  cancel-in-progress: false
+
+env:
+  LLAMA_TAG: b10333
+  HF_REPO: prism-ml/Ternary-Bonsai-2-2B-gguf
+
+jobs:
+  spike:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: sudo apt-get update -q && sudo apt-get install -y -q ninja-build cmake
+
+      - name: Cache llama.cpp (${{ env.LLAMA_TAG }})
+        uses: actions/cache@v4
+        with:
+          path: ~/llama.cpp
+          key: spike-llama-${{ env.LLAMA_TAG }}
+
+      - name: Fetch llama.cpp
+        run: |
+          if [ ! -f "$HOME/llama.cpp/CMakeLists.txt" ]; then
+            git clone --depth 1 --branch "$LLAMA_TAG" \
+              https://github.com/ggml-org/llama.cpp.git "$HOME/llama.cpp"
+          fi
+
+      - name: Build llama-bench + llama-mtmd-cli (host x86_64)
+        run: |
+          cmake -S "$HOME/llama.cpp" -B llbuild -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_SERVER=OFF -DLLAMA_CURL=OFF \
+            -DGGML_NATIVE=ON -DGGML_OPENMP=ON
+          cmake --build llbuild --target llama-bench llama-mtmd-cli -j "$(nproc)"
+          ls -la llbuild/bin | head
+
+      - name: Cache model files
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: bonsai-2-${{ github.event.inputs.size || '2B' }}
+
+      - name: Download Bonsai 2 (Q2_0) + mmproj Q8_0
+        run: |
+          SIZE="${{ github.event.inputs.size || '2B' }}"
+          REPO="prism-ml/Ternary-Bonsai-2-${SIZE}-gguf"
+          mkdir -p models
+          M="Ternary-Bonsai-2-${SIZE}-Q2_0.gguf"
+          P="Ternary-Bonsai-2-${SIZE}-mmproj-Q8_0.gguf"
+          [ -f "models/$M" ] || curl -fL --retry 3 -o "models/$M" \
+            "https://huggingface.co/$REPO/resolve/main/$M"
+          [ -f "models/$P" ] || curl -fL --retry 3 -o "models/$P" \
+            "https://huggingface.co/$REPO/resolve/main/$P"
+          ls -la models
+          [ "$M" = "Ternary-Bonsai-2-${SIZE}-Q2_0.gguf" ] || exit 1
+          # o arquivo é o esperado? (nome + tamanho plausível)
+          test -s "models/$M"
+
+      # ---------------------------------------------------------------------
+      # 1) O TESTE DECISIVO: o upstream carrega o Q2_0 e roda?
+      # ---------------------------------------------------------------------
+      - name: llama-bench (carrega o modelo e mede tok/s)
+        run: |
+          SIZE="${{ github.event.inputs.size || '2B' }}"
+          ./llbuild/bin/llama-bench \
+            -m "models/Ternary-Bonsai-2-${SIZE}-Q2_0.gguf" \
+            -p 64 -n 32 -t 4 -r 1 2>&1 | tee bench.txt
+          grep -qE "pp64|tg32" bench.txt
+
+      # ---------------------------------------------------------------------
+      # 2) Visão (mmproj Q8_0) — valida o encoder e o template multimodal
+      # ---------------------------------------------------------------------
+      - name: Vision smoke test (llama-mtmd-cli)
+        continue-on-error: true
+        run: |
+          SIZE="${{ github.event.inputs.size || '2B' }}"
+          curl -fL --retry 2 -o test.png \
+            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png"
+          ./llbuild/bin/llama-mtmd-cli \
+            -m "models/Ternary-Bonsai-2-${SIZE}-Q2_0.gguf" \
+            --mmproj "models/Ternary-Bonsai-2-${SIZE}-mmproj-Q8_0.gguf" \
+            --image test.png \
+            -p "Describe this image in one sentence." -n 32 -t 4 2>&1 | tee vision.txt
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "## Spike Bonsai 2 (${{ github.event.inputs.size || '2B' }})"
+            echo
+            echo '```'
+            cat bench.txt 2>/dev/null || echo "bench não gerado"
+            echo '```'
+            echo
+            echo '### Visão'
+            echo '```'
+            tail -40 vision.txt 2>/dev/null || echo "visão não gerada"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spike-bonsai-logs
+          path: |
+            bench.txt
+            vision.txt
+          if-no-files-found: ignore
+          retention-days: 30

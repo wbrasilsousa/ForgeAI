@@ -18,6 +18,11 @@ data class ModelInfo(
     val nCtxTrain: Long? = null,
     val nLayer: Int? = null,
     val nEmbd: Int? = null,
+    val nHead: Int? = null,
+    /** Cabeças KV (GQA/MQA). Igual a [nHead] em modelos MHA. */
+    val nHeadKv: Int? = null,
+    /** Camadas que realmente guardam KV (atenção híbrida: < [nLayer]). */
+    val nKvLayers: Int? = null,
     val nVocab: Int? = null,
     val nTensors: Int? = null,
     val tokenizer: String? = null,
@@ -135,6 +140,9 @@ data class ModelInfo(
                 nCtxTrain = optLong("n_ctx_train"),
                 nLayer = optInt("n_layer"),
                 nEmbd = optInt("n_embd"),
+                nHead = optInt("n_head"),
+                nHeadKv = optInt("n_head_kv"),
+                nKvLayers = optInt("n_kv_layers"),
                 nVocab = optInt("n_vocab"),
                 nTensors = optInt("n_tensors"),
                 tokenizer = meta.optString("tokenizer").ifBlank { null },

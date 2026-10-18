@@ -372,6 +372,51 @@ Java_dev_forgeai_LlamaEngine_nativeInspectModel(JNIEnv * env, jobject, jstring j
     add_num("n_embd",      sarch("embedding_length"));
     add_num("n_head",      sarch("attention.head_count"));
     add_num("n_vocab",     sarch("vocab_size"));
+
+    // KV heads: escalar em MHA/GQA, ou ARRAY por camada em atenção híbrida
+    // (Qwen3.5/Bonsai 2: 3 camadas lineares : 1 full-attention). No array,
+    // contamos só as camadas com KV > 0 e usamos o maior valor (full-attention)
+    // — é exatamente o que dimensiona o KV cache (TD-25, fit badge).
+    {
+        const std::string key = pfx + ".attention.head_count_kv";
+        const int64_t id = gguf_find_key(g, key.c_str());
+        if (id >= 0) {
+            const enum gguf_type t = gguf_get_kv_type(g, id);
+            long long kv_heads = 0;
+            long long kv_layers = 0;
+            if (t == GGUF_TYPE_ARRAY) {
+                const enum gguf_type et = gguf_get_arr_type(g, id);
+                const size_t n = gguf_get_arr_n(g, id);
+                const void * data = gguf_get_arr_data(g, id);
+                for (size_t i = 0; i < n && data; i++) {
+                    long long v = 0;
+                    switch (et) {
+                        case GGUF_TYPE_INT32:  v = ((const int32_t  *) data)[i]; break;
+                        case GGUF_TYPE_INT64:  v = ((const int64_t  *) data)[i]; break;
+                        case GGUF_TYPE_UINT32: v = (long long) ((const uint32_t *) data)[i]; break;
+                        case GGUF_TYPE_UINT64: v = (long long) ((const uint64_t *) data)[i]; break;
+                        default: break;
+                    }
+                    if (v > 0) { kv_layers++; if (v > kv_heads) kv_heads = v; }
+                }
+            } else {
+                switch (t) {
+                    case GGUF_TYPE_INT32:  kv_heads = gguf_get_val_i32(g, id); break;
+                    case GGUF_TYPE_INT64:  kv_heads = (long long) gguf_get_val_i64(g, id); break;
+                    case GGUF_TYPE_UINT32: kv_heads = (long long) gguf_get_val_u32(g, id); break;
+                    case GGUF_TYPE_UINT64: kv_heads = (long long) gguf_get_val_u64(g, id); break;
+                    default: break;
+                }
+            }
+            if (kv_heads > 0) {
+                json += "\"n_head_kv\":" + std::to_string(kv_heads) + ",";
+                // escalar => todas as camadas guardam KV (o Kotlin cai em n_layer)
+                if (kv_layers > 0) {
+                    json += "\"n_kv_layers\":" + std::to_string(kv_layers) + ",";
+                }
+            }
+        }
+    }
     json += "\"n_tensors\":"  + std::to_string(gguf_get_n_tensors(g)) + ",";
     json += "\"n_params\":"  + std::to_string(n_params) + ",";
     // chat template (used to detect tool-call support without loading weights)

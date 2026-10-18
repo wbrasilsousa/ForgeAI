@@ -68,7 +68,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import dev.forgeai.data.HfResolver
+import dev.forgeai.data.MemoryEstimate
 import dev.forgeai.data.ModelDownloader
+import dev.forgeai.data.ModelFit
 import dev.forgeai.data.ModelInfo
 import dev.forgeai.data.SuggestedModel
 import dev.forgeai.data.SuggestedModels
@@ -77,6 +79,7 @@ import dev.forgeai.ui.UrlState
 import dev.forgeai.ui.components.Chip
 import dev.forgeai.ui.components.SectionCard
 import dev.forgeai.ui.components.StatChip
+import dev.forgeai.ui.components.StatusPill
 import dev.forgeai.ui.components.VSpace
 import dev.forgeai.ui.theme.BrandGradient
 import kotlinx.coroutines.delay
@@ -182,6 +185,11 @@ fun ModelsScreen(vm: AppViewModel) {
                     ModelCard(
                         model = model,
                         loading = vm.engineStatus is dev.forgeai.ui.EngineStatus.Loading,
+                        availableBytes = vm.ram.availableBytes,
+                        nCtx = vm.settingsFor(model.path).nCtx,
+                        visionBytes = model.mmprojPath
+                            ?.let { runCatching { java.io.File(it).length() }.getOrDefault(0L) }
+                            ?: 0L,
                         onLoad = { if (model.isLoaded) vm.unloadModel() else pendingConfirm = ModelConfirm.Load(model) },
                         onDelete = { pendingConfirm = ModelConfirm.Delete(model) },
                     )
@@ -310,6 +318,17 @@ private fun StorageCard(vm: AppViewModel) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val ram = vm.ram
+            if (ram.totalBytes > 0L) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "RAM livre: ${ModelInfo.formatBytes(ram.availableBytes)} de ${ModelInfo.formatBytes(ram.totalBytes)}" +
+                        if (ram.lowMemory) " · memória baixa" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (ram.lowMemory) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -317,14 +336,37 @@ private fun StorageCard(vm: AppViewModel) {
 // ---------------------------------------------------------------------------
 // Model card
 // ---------------------------------------------------------------------------
+
+/** Badge "cabe / aperta / não cabe" com a estimativa de memória (TD-25). */
+@Composable
+private fun FitBadge(estimate: MemoryEstimate) {
+    val color = when (estimate.fit) {
+        MemoryEstimate.Fit.GOOD -> Color(0xFF4ADE80)
+        MemoryEstimate.Fit.TIGHT -> Color(0xFFFBBF24)
+        MemoryEstimate.Fit.NO_FIT -> MaterialTheme.colorScheme.error
+    }
+    StatusPill(
+        text = "${estimate.shortLabel} · ~${estimate.totalLabel} de RAM",
+        color = color,
+    )
+}
 @Composable
 private fun ModelCard(
     model: ModelInfo,
     loading: Boolean,
+    availableBytes: Long,
+    nCtx: Int,
+    visionBytes: Long,
     onLoad: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val primary = MaterialTheme.colorScheme.primary
+    val estimate = ModelFit.estimate(
+        model = model,
+        nCtx = nCtx,
+        availableBytes = availableBytes,
+        visionBytes = visionBytes,
+    )
     SectionCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -405,12 +447,19 @@ private fun ModelCard(
 
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    model.sizeLabel + (model.nCtxTrain?.let { " · ctx ${it}" } ?: ""),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        model.sizeLabel + (model.nCtxTrain?.let { " · ctx ${it}" } ?: ""),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    // Fit badge (TD-25): pesos + KV (contexto salvo do modelo)
+                    // + buffer + mmproj vs RAM livre real.
+                    if (model.metaLoaded) {
+                        Spacer(Modifier.height(4.dp))
+                        FitBadge(estimate)
+                    }
+                }
                 if (!model.isLoaded) {
                     Surface(
                         onClick = onLoad,
@@ -737,7 +786,7 @@ private fun AddModelSheet(vm: AppViewModel, onDismiss: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(sorted) { file ->
-                            val isMmproj = file.fileName.startsWith("mmproj-", ignoreCase = true)
+                            val isMmproj = ModelInfo.isMmprojName(file.fileName)
                             FileRow(
                                 file = file,
                                 hasVision = !isMmproj && HfResolver.findMmproj(st.files, file.fileName) != null,
@@ -759,7 +808,11 @@ private fun AddModelSheet(vm: AppViewModel, onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(SuggestedModels.all) { s ->
-                    SuggestionRow(s) { vm.downloadModel(s.repo, s.file, null) }
+                    SuggestionRow(
+                        s = s,
+                        availableBytes = vm.ram.availableBytes,
+                        onDownload = { vm.downloadModel(s.repo, s.file, s.sizeBytes, 1, s.mmprojFile) },
+                    )
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -804,7 +857,16 @@ private fun FileRow(file: HfResolver.HfFile, hasVision: Boolean = false, onClick
 }
 
 @Composable
-private fun SuggestionRow(s: SuggestedModel, onDownload: () -> Unit) {
+private fun SuggestionRow(s: SuggestedModel, availableBytes: Long, onDownload: () -> Unit) {
+    // Sem metadados do GGUF ainda: compara só o peso dos arquivos com a RAM
+    // livre (o KV cache entra depois, no cartão do modelo instalado).
+    val weightRatio = if (availableBytes > 0L) s.sizeBytes.toFloat() / availableBytes else 0f
+    val hint = when {
+        availableBytes <= 0L -> null
+        weightRatio <= 0.25f -> "leve"
+        weightRatio <= 0.50f -> "ok"
+        else -> "pesado"
+    }
     Surface(
         onClick = onDownload,
         shape = RoundedCornerShape(14.dp),
@@ -818,6 +880,8 @@ private fun SuggestionRow(s: SuggestedModel, onDownload: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     StatChip(s.paramsLabel, accent = true)
                     StatChip(s.sizeLabel)
+                    if (s.supportsVision) StatChip("📷 visão")
+                    hint?.let { StatChip(it) }
                 }
                 Spacer(Modifier.height(3.dp))
                 Text(s.repo.split("/").last(), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1)

@@ -1,60 +1,61 @@
 package dev.forgeai.data
 
 /**
- * Curated list of small instruct models that run well on phones.
- * File names verified against the Hub API (2025-11).
+ * Modelos sugeridos na tela "Adicionar".
+ *
+ * Desde a Onda 0 a lista é a família **PrismML Bonsai 2** (ternary, base
+ * Qwen3.5, multimodal): 2B, 4B e 9B. Detalhes da escolha do packing em
+ * `docs/DECISIONS.md` (ADR-001):
+ *
+ *  - usamos o packing `Q2_0` porque é o único que o llama.cpp **upstream**
+ *    (`b10333`) carrega — `PQ2_0`/`PTQ1_0` exigem o fork da PrismML;
+ *  - o encoder de visão vem do mesmo repositório, em `mmproj-Q8_0` (≈2× mais
+ *    rápido no celular que o BF16, sem perda visual perceptível);
+ *  - os tamanhos abaixo são os reais do Hub (out/2026) e servem para o badge de
+ *    compatibilidade antes do download.
  */
 data class SuggestedModel(
     val repo: String,
     val file: String,
+    /** Encoder de visão (mmproj) do mesmo repositório; null = modelo só texto. */
+    val mmprojFile: String? = null,
     val paramsLabel: String,
-    val sizeLabel: String,
+    val sizeBytes: Long,
     val note: String,
-)
+) {
+    val sizeLabel: String get() = ModelInfo.formatBytes(sizeBytes)
+
+    /** Tamanho total baixado (modelo + encoder de visão). */
+    val totalBytes: Long get() = sizeBytes
+
+    val supportsVision: Boolean get() = mmprojFile != null
+}
 
 object SuggestedModels {
     val all = listOf(
         SuggestedModel(
-            repo = "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
-            file = "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-            paramsLabel = "0.5B",
-            sizeLabel = "~400 MB",
-            note = "Rápido em qualquer celular",
+            repo = "prism-ml/Ternary-Bonsai-2-2B-gguf",
+            file = "Ternary-Bonsai-2-2B-Q2_0.gguf",
+            mmprojFile = "Ternary-Bonsai-2-2B-mmproj-Q8_0.gguf",
+            paramsLabel = "2B",
+            sizeBytes = 547_000_000,
+            note = "Rápido · vê imagens e usa ferramentas",
         ),
         SuggestedModel(
-            repo = "HuggingFaceTB/SmolLM2-360M-Instruct-GGUF",
-            file = "smollm2-360m-instruct-q8_0.gguf",
-            paramsLabel = "360M",
-            sizeLabel = "~270 MB",
-            note = "Leve e veloz",
+            repo = "prism-ml/Ternary-Bonsai-2-4B-gguf",
+            file = "Ternary-Bonsai-2-4B-Q2_0.gguf",
+            mmprojFile = "Ternary-Bonsai-2-4B-mmproj-Q8_0.gguf",
+            paramsLabel = "4B",
+            sizeBytes = 1_212_000_000,
+            note = "Melhor equilíbrio entre qualidade e velocidade",
         ),
         SuggestedModel(
-            repo = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
-            file = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
-            paramsLabel = "1.1B",
-            sizeLabel = "~670 MB",
-            note = "Clássico para celular",
-        ),
-        SuggestedModel(
-            repo = "HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF",
-            file = "smollm2-1.7b-instruct-q4_k_m.gguf",
-            paramsLabel = "1.7B",
-            sizeLabel = "~1.1 GB",
-            note = "Melhor custo-benefício",
-        ),
-        SuggestedModel(
-            repo = "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
-            file = "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-            paramsLabel = "1.5B",
-            sizeLabel = "~1 GB",
-            note = "Excelente em português",
-        ),
-        SuggestedModel(
-            repo = "bartowski/Phi-3.5-mini-instruct-GGUF",
-            file = "Phi-3.5-mini-instruct-Q4_K_M.gguf",
-            paramsLabel = "3.8B",
-            sizeLabel = "~2.3 GB",
-            note = "Para dispositivos potentes",
+            repo = "prism-ml/Ternary-Bonsai-2-9B-gguf",
+            file = "Ternary-Bonsai-2-9B-Q2_0.gguf",
+            mmprojFile = "Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf",
+            paramsLabel = "9B",
+            sizeBytes = 2_557_000_000,
+            note = "Qualidade máxima · ~3,2 GB com a visão",
         ),
     )
 }

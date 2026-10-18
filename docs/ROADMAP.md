@@ -356,3 +356,27 @@ mesmo modelo, sem perder visão/tools. Senão, descartar sem culpa.
 Começar pelo QNN seria construir um segundo motor de inferência antes de o primeiro
 compilar de forma reprodutível — e trocaria os recursos que já funcionam (GGUF, mtmd,
 tools, HF) por um benchmark.
+
+---
+
+## 7. Progresso
+
+| TD | Status | Evidência |
+|---|---|---|
+| TD-01 build NDK/16 KB | ✅ feito | `.github/workflows/android.yml` + `build_native.sh` (NDK r28c; `p_align=16384` verificado no artefato) |
+| TD-02 targetSdk | ⏳ pendente | hoje `compileSdk/targetSdk 34`; subir junto com TD-08 (Android 16 ignora lock de orientação em telas grandes) |
+| TD-03 spike Bonsai 2 | 🔬 em andamento | `.github/workflows/spike-bonsai.yml` carrega `Q2_0` no upstream e roda a visão |
+| TD-07 testes/CI | ✅ feito | de 0 → 66 testes JVM; CI verde (native + apk) |
+| TD-25 fit badge | ✅ feito | `data/ModelFit.kt` + badge na tela Modelos + `n_head_kv`/`n_kv_layers` no JNI |
+| Sugestões | ✅ trocadas | `SuggestedModels` = Bonsai 2 2B/4B/9B (`Q2_0` + `mmproj-Q8_0`) |
+
+Descobertas do caminho (já corrigidas):
+
+- o `mmproj` da PrismML fica no **meio** do nome (`<modelo>-mmproj-Q8_0.gguf`); o app
+  só reconhecia prefixo → a visão do Bonsai 2 nunca ligaria;
+- packings ternários (`Q2_0`/`PQ2_0`/`PTQ1_0`/`Q1_0`) não eram reconhecidos como
+  quantização (some o badge e o pareamento do encoder);
+- `attention.head_count_kv` é **array por camada** nos híbridos (Qwen3.5): sem ler o
+  array, o KV cache seria superestimado em ~4× (e o fit badge diria “não cabe”);
+- os três tamanhos do Bonsai 2 têm `Q2_0` **e** `mmproj-Q8_0` → o caminho upstream
+  (ADR-001) cobre 2B, 4B e 9B.

@@ -1,6 +1,8 @@
 package dev.forgeai.ui
 
+import android.app.ActivityManager
 import android.app.Application
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.runtime.getValue
@@ -68,6 +70,13 @@ sealed interface UrlState {
     data class Ready(val repo: String, val files: List<HfResolver.HfFile>) : UrlState
     data class Error(val message: String) : UrlState
 }
+
+/** RAM do aparelho, para o badge de compatibilidade (TD-25). */
+data class RamInfo(
+    val availableBytes: Long,
+    val totalBytes: Long,
+    val lowMemory: Boolean = false,
+)
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -139,6 +148,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var storage by mutableStateOf(Triple(0L, 0L, 0L))
         private set
 
+    /** RAM livre/total do aparelho (badge de compatibilidade dos modelos). */
+    var ram by mutableStateOf(RamInfo(0L, 0L))
+        private set
+
     val downloadTasks: StateFlow<Map<String, ModelDownloader.Task>> = downloader.tasks
     val loadProgress = LlamaEngine.loadProgress
     val engineReady = LlamaEngine.engineReady
@@ -195,6 +208,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         storage = runCatching {
             Triple(repo.freeSpaceBytes(), repo.usedSpaceBytes(), repo.totalSpaceBytes())
         }.getOrDefault(Triple(0L, 0L, 0L))
+        refreshRam()
+    }
+
+    /** Lê a RAM livre/total do sistema (usado no fit badge). */
+    fun refreshRam() {
+        ram = runCatching {
+            val am = getApplication<Application>()
+                .getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val mi = ActivityManager.MemoryInfo()
+            am.getMemoryInfo(mi)
+            RamInfo(mi.availMem, mi.totalMem, mi.lowMemory)
+        }.getOrDefault(RamInfo(0L, 0L))
     }
 
     fun showSnack(msg: String) {
