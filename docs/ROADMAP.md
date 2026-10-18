@@ -365,7 +365,7 @@ tools, HF) por um benchmark.
 |---|---|---|
 | TD-01 build NDK/16 KB | ✅ feito | `.github/workflows/android.yml` + `build_native.sh` (NDK r28c; `p_align=16384` verificado no artefato) |
 | TD-02 targetSdk | ⏳ pendente | hoje `compileSdk/targetSdk 34`; subir junto com TD-08 (Android 16 ignora lock de orientação em telas grandes) |
-| TD-03 spike Bonsai 2 | 🔬 em andamento | `.github/workflows/spike-bonsai.yml` carrega `Q2_0` no upstream e roda a visão |
+| TD-03 spike Bonsai 2 | ✅ feito (ver §8) | `.github/workflows/spike-bonsai.yml`: `Q2_0` carrega no upstream (`qwen35 2B Q2_0`), visão codifica, bench em ARM medido |
 | TD-07 testes/CI | ✅ feito | de 0 → 66 testes JVM; CI verde (native + apk) |
 | TD-25 fit badge | ✅ feito | `data/ModelFit.kt` + badge na tela Modelos + `n_head_kv`/`n_kv_layers` no JNI |
 | Sugestões | ✅ trocadas | `SuggestedModels` = Bonsai 2 2B/4B/9B (`Q2_0` + `mmproj-Q8_0`) |
@@ -380,3 +380,33 @@ Descobertas do caminho (já corrigidas):
   array, o KV cache seria superestimado em ~4× (e o fit badge diria “não cabe”);
 - os três tamanhos do Bonsai 2 têm `Q2_0` **e** `mmproj-Q8_0` → o caminho upstream
   (ADR-001) cobre 2B, 4B e 9B.
+
+---
+
+## 8. Resultados do spike Bonsai 2 (TD-03)
+
+Workflow `spike-bonsai` (`b10333`, build `0865990`):
+
+```
+x86_64, 4 threads (runner padrão)   pp64 2,77 t/s · tg32 1,97 t/s
+ARM64,  4 threads (ubuntu-24.04-arm) pp64 28,44 t/s · tg32 19,06 t/s
+baseline Qwen2.5-1.5B Q4_K_M (ARM)   pp64 105,24 t/s · tg32 33,27 t/s
+```
+
+Leituras:
+
+1. **ADR-001 confirmado**: o llama.cpp upstream carrega o packing `Q2_0`
+   (`qwen35 2B Q2_0`, 510 MiB, 1,88B parâmetros). Não precisamos do fork PrismML
+   para 2B/4B/9B — só para `PQ2_0`/`PTQ1_0` (arquivos ~6% menores) e MTP.
+2. **Os kernels ternários são ~10× mais rápidos em ARM que em x86**, e ainda
+   assim **~0,6× a velocidade** de um Q4_K_M de 1,5B no mesmo hardware. Ou seja:
+   o valor do Bonsai 2 é **tamanho + visão + 262k de contexto**, não tok/s bruto.
+   No Fold 8 (8 núcleos, prime 4,7 GHz, mais banda) a expectativa é bem melhor —
+   medir com o app instalado (TD-13) antes de prometer número.
+3. **Visão funciona estruturalmente** (mmproj Q8_0 reconhecido, imagem
+   codificada em ~5 s), mas o texto gerado saiu sem sentido no smoke test: o
+   mtmd avisa que **Qwen-VL exige ≥1024 tokens de imagem** e o default é 247.
+   → requisito novo para o TD-18: configurar `image_min_tokens` no `mtmd` e
+   revisar a política de downscale (hoje fixa em 1024 px) e o prompt ChatML
+   manual do caminho de visão.
+

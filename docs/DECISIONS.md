@@ -7,7 +7,8 @@ contexto, decisão e consequência. O plano executável fica em `docs/ROADMAP.md
 
 ## ADR-001 — Base nativa: upstream `llama.cpp` + packing `Q2_0`
 
-**Data:** 2026-10-17 · **Status:** aceita (revisável pelo spike TD-03)
+**Data:** 2026-10-17 · **Status:** **validada em 2026-10-18** pelo spike TD-03
+(`qwen35 2B Q2_0` carrega e roda no `b10333`; ARM64: 28,4 t/s prefill, 19,1 t/s decode)
 
 **Contexto.** A família Bonsai 2 (PrismML) publica três packings ternários:
 `PTQ1_0` (tipo ggml 143), `PQ2_0` (tipo 142) e `Q2_0` (tipo 42). Os dois primeiros
