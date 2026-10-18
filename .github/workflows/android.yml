@@ -113,23 +113,13 @@ jobs:
           name: native-libs
           path: app/src/main/jniLibs/arm64-v8a
 
-      - name: Restore stable debug keystore
-        id: keystore
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: debug-keystore-v1
-
-      - name: Create debug keystore if missing
-        if: steps.keystore.outputs.cache-hit != 'true'
+      - name: Use committed debug keystore
         run: |
+          # Chave fixa versionada em keystore/debug.keystore: mesma assinatura em
+          # todo build -> o APK atualiza por cima sem desinstalar.
           mkdir -p ~/.android
-          keytool -genkeypair -v \
-            -keystore ~/.android/debug.keystore \
-            -storepass android -keypass android \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
+          cp keystore/debug.keystore ~/.android/debug.keystore
+          ls -l ~/.android/debug.keystore
 
       - name: Unit tests
         run: |
@@ -148,18 +138,6 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
-
-      # Bootstrap da keystore versionada: exporta a chave usada neste build para
-      # que ela possa ser commitada uma vez em keystore/debug.keystore. A partir
-      # daí todo build usa a chave do repositório (assinatura estável).
-      - name: Upload debug keystore (bootstrap)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-keystore
-          path: ~/.android/debug.keystore
-          if-no-files-found: ignore
-          retention-days: 1
 
       - name: Upload test reports
         if: always()
