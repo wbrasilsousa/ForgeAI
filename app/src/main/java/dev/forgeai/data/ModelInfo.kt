@@ -56,9 +56,21 @@ data class ModelInfo(
          *   "mmproj-LFM2.5-VL-3B-Q8_0.gguf" -> "LFM2.5-VL-3B"
          *   "LFM2.5-VL-3B-Q4_K_M.gguf"      -> "LFM2.5-VL-3B"
          */
+        /** True quando o arquivo é um encoder de visão (mmproj), em qualquer posição do nome. */
+        fun isMmprojName(fileName: String): Boolean =
+            fileName.contains("mmproj", ignoreCase = true)
+
+        /**
+         * Nome base sem o marcador mmproj e sem sufixos de quantização/variante —
+         * usado para casar o encoder de visão com o modelo principal.
+         *   "mmproj-LFM2.5-VL-3B-Q8_0.gguf"            -> "LFM2.5-VL-3B"
+         *   "Ternary-Bonsai-2-2B-mmproj-Q8_0.gguf"     -> "Ternary-Bonsai-2-2B"
+         *   "Ternary-Bonsai-2-4B-PQ2_0-MTP-Q8_0.gguf"  -> "Ternary-Bonsai-2-4B"
+         */
         fun visionBase(fileName: String): String {
             var name = HfResolver.baseName(fileName).removeSuffix(".gguf")
-            if (name.startsWith("mmproj-", ignoreCase = true)) name = name.drop("mmproj-".length)
+            // o marcador pode estar no início OU no meio ("…-2B-mmproj-Q8_0")
+            name = MMPROJ_RE.replace(name, "").trim('-', '_', ' ', '.')
             // Remove sufixos do fim, repetidamente: quantização (Q8_0, PQ2_0, …)
             // e marcadores de variante (MTP, DFlash2). Modelos Bonsai 2 usam
             // nomes compostos como "-PQ2_0-MTP-Q8_0", onde só um strip não basta.
@@ -74,8 +86,10 @@ data class ModelInfo(
                 if (stripped == null || stripped == name || stripped.isEmpty()) break
                 name = stripped
             }
-            return name
+            return name.trim('-', '_', ' ')
         }
+
+        private val MMPROJ_RE = Regex("mmproj[-_ ]?", RegexOption.IGNORE_CASE)
 
         /** Marcadores de variante que não são quantização. */
         private val VARIANT_SUFFIXES = listOf("MTP", "DFlash2", "DFlash")

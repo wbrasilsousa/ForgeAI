@@ -52,4 +52,16 @@ class ModelInfoTest {
         assertFalse(model("a.gguf").supportsVision)
         assertTrue(model("a.gguf").copy(mmprojPath = "/m/mmproj.gguf").supportsVision)
     }
+
+    /**
+     * A PrismML nomeia o encoder como "<modelo>-mmproj-<quant>.gguf": o
+     * marcador não está no início. Se isso quebrar, a visão do Bonsai 2 some.
+     */
+    @Test
+    fun isMmprojName_acceptsMarkerInAnyPosition() {
+        assertTrue(ModelInfo.isMmprojName("mmproj-LFM2.5-VL-3B-Q8_0.gguf"))
+        assertTrue(ModelInfo.isMmprojName("Ternary-Bonsai-2-2B-mmproj-Q8_0.gguf"))
+        assertTrue(ModelInfo.isMmprojName("mmproj-model-f16.gguf"))
+        assertFalse(ModelInfo.isMmprojName("Ternary-Bonsai-2-2B-Q2_0.gguf"))
+    }
 }

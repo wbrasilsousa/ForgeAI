@@ -33,12 +33,14 @@ class ModelRepository(private val context: Context) {
         val allFiles = dir.listFiles { f -> f.isFile && f.name.endsWith(".gguf", ignoreCase = true) }
             ?: return emptyList()
 
-        // mmproj-*.gguf (encoder de visão) não é um modelo standalone: fica
-        // associado ao modelo principal com o mesmo nome base (sem quantização).
+        // mmproj (encoder de visão) não é um modelo standalone: fica associado
+        // ao modelo principal com o mesmo nome base (sem quantização). O marcador
+        // pode estar no início ("mmproj-X.gguf") ou no meio
+        // ("Ternary-Bonsai-2-2B-mmproj-Q8_0.gguf").
         val mmprojs = allFiles
-            .filter { it.name.startsWith("mmproj-", ignoreCase = true) }
+            .filter { ModelInfo.isMmprojName(it.name) }
             .associateBy { ModelInfo.visionBase(it.name) }
-        val modelFiles = allFiles.filterNot { it.name.startsWith("mmproj-", ignoreCase = true) }
+        val modelFiles = allFiles.filterNot { ModelInfo.isMmprojName(it.name) }
 
         // merge sharded models (m-00001-of-00002.gguf + m-00002-of-00002.gguf -> 1 entry)
         val byBase = modelFiles.groupBy { HfResolver.baseName(it.name) }
@@ -77,7 +79,7 @@ class ModelRepository(private val context: Context) {
         val dir = f.parentFile ?: return null
         val base = ModelInfo.visionBase(f.name)
         val mmprojs = dir.listFiles { x ->
-            x.isFile && x.name.startsWith("mmproj-", ignoreCase = true)
+            x.isFile && ModelInfo.isMmprojName(x.name)
         } ?: return null
         return mmprojs
             .firstOrNull { ModelInfo.visionBase(it.name) == base }

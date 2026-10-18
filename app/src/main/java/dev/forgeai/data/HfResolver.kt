@@ -217,8 +217,9 @@ object HfResolver {
     fun findMmproj(files: List<HfFile>, modelFile: String): String? {
         val base = ModelInfo.visionBase(modelFile)
         val candidates = files.filter {
-            it.fileName.startsWith("mmproj-", ignoreCase = true) &&
-                ModelInfo.visionBase(it.fileName) == base
+            ModelInfo.isMmprojName(it.fileName) &&
+                // base vazia (ex.: "mmproj-model-f16.gguf") casa com qualquer modelo
+                ModelInfo.visionBase(it.fileName).let { b -> b == base || b.isEmpty() || base.isEmpty() }
         }
         if (candidates.isEmpty()) return null
         val rank = { f: HfFile ->
