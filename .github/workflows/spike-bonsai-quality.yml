@@ -1,0 +1,131 @@
+name: spike-bonsai-quality
+
+# TD-03b: o Q2_0 do Bonsai 2 produz TEXTO COERENTE no upstream?
+# O llama-bench (spike anterior) provou que carrega e roda rápido, mas não que
+# o resultado está correto. Sintoma observado no app e no mtmd: saída sem
+# sentido (mistura de chinês/inglês) — típico de packing/kernels errados.
+#
+# Roda o MESMO arquivo em dois runtimes, com prompts determinísticos:
+#   1. upstream ggml-org b10333
+#   2. fork PrismML-Eng/llama.cpp (branch prism) — kernel de referência
+# e, no fork, também PQ2_0 e PTQ1_0 (menores, tipos privados do fork).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 7 * * 1'
+
+concurrency:
+  group: spike-bonsai-quality
+  cancel-in-progress: false
+
+env:
+  LLAMA_TAG: b10333
+  HF_REPO: prism-ml/Ternary-Bonsai-2-2B-gguf
+
+jobs:
+  # ---------------------------------------------------------------------------
+  quality-upstream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: sudo apt-get update -q && sudo apt-get install -y -q ninja-build cmake
+      - name: Cache llama.cpp
+        uses: actions/cache@v4
+        with:
+          path: ~/llama.cpp
+          key: quality-llama-${{ env.LLAMA_TAG }}
+      - name: Fetch llama.cpp upstream
+        run: |
+          if [ ! -f "$HOME/llama.cpp/CMakeLists.txt" ]; then
+            git clone --depth 1 --branch "$LLAMA_TAG" https://github.com/ggml-org/llama.cpp.git "$HOME/llama.cpp"
+          fi
+      - name: Build llama-cli
+        run: |
+          cmake -S "$HOME/llama.cpp" -B llbuild -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF -DLLAMA_CURL=OFF -DGGML_NATIVE=ON
+          cmake --build llbuild --target llama-cli -j "$(nproc)"
+      - name: Cache model
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: bonsai-models-q2v1
+      - name: Download Q2_0
+        run: |
+          mkdir -p models
+          M=Ternary-Bonsai-2-2B-Q2_0.gguf
+          [ -f "models/$M" ] || curl -fL --retry 3 -o "models/$M" \
+            "https://huggingface.co/$HF_REPO/resolve/main/$M"
+      - name: Generate (deterministico)
+        run: |
+          run() {
+            echo "### prompt: $2"
+            ./llbuild/bin/llama-cli -m "$1" -no-cnv -p "$2" -n 24 --temp 0 --seed 42 -t 4 2>&1 | tail -14
+            echo
+          }
+          run models/Ternary-Bonsai-2-2B-Q2_0.gguf "The capital of France is" | tee q.txt
+          run models/Ternary-Bonsai-2-2B-Q2_0.gguf "Explique em uma frase o que e fotossintese." | tee -a q.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-upstream
+          path: q.txt
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  quality-fork:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: sudo apt-get update -q && sudo apt-get install -y -q ninja-build cmake
+      - name: Cache fork
+        uses: actions/cache@v4
+        with:
+          path: ~/llama-fork
+          key: quality-llama-fork-prism
+      - name: Fetch PrismML fork
+        run: |
+          if [ ! -f "$HOME/llama-fork/CMakeLists.txt" ]; then
+            git clone --depth 1 --branch prism https://github.com/PrismML-Eng/llama.cpp.git "$HOME/llama-fork"
+          fi
+          git -C "$HOME/llama-fork" log -1 --oneline || true
+      - name: Build llama-cli (fork)
+        run: |
+          cmake -S "$HOME/llama-fork" -B llbuild -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF -DLLAMA_CURL=OFF -DGGML_NATIVE=ON
+          cmake --build llbuild --target llama-cli -j "$(nproc)" || \
+            cmake --build llbuild --target llama-simple -j "$(nproc)"
+          ls llbuild/bin | head
+      - name: Cache models
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: bonsai-models-all-v1
+      - name: Download Q2_0 + PQ2_0 + PTQ1_0
+        run: |
+          mkdir -p models
+          for M in Ternary-Bonsai-2-2B-Q2_0.gguf Ternary-Bonsai-2-2B-PQ2_0.gguf Ternary-Bonsai-2-2B-PTQ1_0.gguf; do
+            [ -f "models/$M" ] || curl -fL --retry 3 -o "models/$M" \
+              "https://huggingface.co/$HF_REPO/resolve/main/$M"
+          done
+          ls -la models
+      - name: Generate (mesmos prompts, 3 packings)
+        run: |
+          BIN=./llbuild/bin/llama-cli
+          [ -x "$BIN" ] || BIN=./llbuild/bin/llama-simple
+          : > q.txt
+          for M in models/*.gguf; do
+            echo "### $M" | tee -a q.txt
+            $BIN -m "$M" -no-cnv -p "The capital of France is" -n 24 --temp 0 --seed 42 -t 4 2>&1 | tail -10 | tee -a q.txt
+            echo | tee -a q.txt
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-fork
+          path: q.txt
+          if-no-files-found: ignore

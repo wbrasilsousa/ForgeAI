@@ -142,7 +142,12 @@ class ModelRepository(private val context: Context) {
         }.getOrDefault(0L)
     }
 
-    fun usedSpaceBytes(): Long = listModels().sumOf { it.sizeBytes }
+    /** Soma o que está realmente ocupando espaço: modelos + encoders de visão + downloads parciais. */
+    fun usedSpaceBytes(): Long {
+        val dir = modelsDir
+        val files = dir.listFiles() ?: return 0L
+        return files.filter { it.isFile }.sumOf { it.length() }
+    }
 
     fun fileFor(name: String): File = File(modelsDir, name)
 }
