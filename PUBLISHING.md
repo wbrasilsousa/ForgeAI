@@ -9,7 +9,7 @@
 > **Antes de distribuir o APK para outras pessoas, reconstrua a lib em modo portátil:**
 >
 > ```bash
-> FORGE_ARM_DOTPROD=0 ./scripts/build_native.sh
+> FORGE_TUNE=portable ./scripts/build_native.sh
 > ```
 >
 > Um APK com o `.so` dotprod **crasha** em aparelhos sem suporte
@@ -63,8 +63,8 @@ Itens marcados com **BLOQUEANTE** impedem a publicação se não forem resolvido
 - [ ] **BLOQUEANTE — decidir o build da lib nativa para distribuição:**
       - Play Store / público geral → **`FORGE_ALL_VARIANTS=1 ./scripts/build_native.sh`**
         (recomendado: portátil E rápido, dispatch por CPU em runtime).
-      - Ou **`FORGE_ARM_DOTPROD=0 ./scripts/build_native.sh`** (baseline portátil, mais simples, sem kernels otimizados).
-      - Distribuição restrita a este aparelho (sideload pessoal) → pode manter `FORGE_ARM_DOTPROD=1`.
+      - Ou **`FORGE_TUNE=portable ./scripts/build_native.sh`** (baseline portátil, mais simples, sem kernels otimizados).
+      - Distribuição restrita a este aparelho (sideload pessoal) → pode manter `FORGE_TUNE=v9` (ou `auto`).
       - O `.so` com dotprod **crasha em aparelhos sem suporte** (Cortex-A73 e anteriores).
 
 ### 1.1 — Build ALL_VARIANTS (recomendado para distribuir)
@@ -94,7 +94,7 @@ Observações:
 - Escolha em runtime: neste aparelho (M4+A75+A55, com dotprod e fp16) o
   dispatch escolhe a variante `armv8.2_2` (dotprod+fp16). Nos nossos testes
   a fp16 prejudicou o decode de Q4_K_M neste SoC (~2,2 vs ~5 tok/s) — ou
-  seja, no SEU aparelho o build direto `FORGE_ARM_DOTPROD=1` ainda é o mais
+  seja, no SEU aparelho o build direto `FORGE_TUNE=dotprod` ainda é o mais
   rápido. O ALL_VARIANTS brilha para o público geral (A73+ cai no baseline,
   A76+/M4+ ganham dotprod, aparelhos novos ganham i8mm/SVE).
 - APK maior (~15–40 MB de libs extras).

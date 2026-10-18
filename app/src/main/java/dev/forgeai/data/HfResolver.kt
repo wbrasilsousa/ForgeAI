@@ -241,8 +241,11 @@ object HfResolver {
         "Q4_K_M", "Q5_K_M", "Q4_K_S", "Q5_K_S", "Q3_K_M", "Q3_K_L", "Q3_K_S",
         "Q2_K_S", "Q2_K", "Q6_K", "Q8_0", "Q5_0", "Q5_1", "Q4_0", "Q4_1", "Q3_0",
         "IQ1_M", "IQ1_S", "IQ2_M", "IQ2_S", "IQ2_XXS", "IQ2_XS", "IQ3_M", "IQ3_S",
-        "IQ3_XXS", "IQ3_XS", "IQ4_NL", "IQ4_XS", "TQ1_0", "TQ2_0", "MXFP4",
-        "BF16", "FP16", "F16", "F32",
+        "IQ3_XXS", "IQ3_XS", "IQ4_NL", "IQ4_XS",
+        // ternary (Bonsai/Ternary-Bonsai 2): os packings da PrismML vêm antes
+        // dos genéricos para o nome base do mmproj casar ("-PQ2_0" != "-Q2_0").
+        "PTQ1_0", "PQ2_0", "TQ1_0", "TQ2_0", "Q2_0", "Q1_0",
+        "MXFP4", "BF16", "FP16", "F16", "F32",
     )
 
     fun quantFromName(fileName: String): String? {

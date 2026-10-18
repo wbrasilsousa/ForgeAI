@@ -48,17 +48,37 @@ scripts/
 
 ## Como compilar
 
-> ⚠️ **Se for distribuir o APK para outras pessoas**: o build padrão é
-> otimizado para o CPU deste aparelho (kernels dotprod) e não roda em
-> celulares sem esse suporte. Reconstrua com `FORGE_ARM_DOTPROD=0` para
-> gerar uma lib portátil — detalhes no [checklist de publicação](PUBLISHING.md).
+### No CI (recomendado) — GitHub Actions
+
+O artefato oficial é produzido pelo workflow `.github/workflows/android.yml`:
+
+1. job **native**: baixa o NDK r28c (page size 16 KB), clona o `llama.cpp`
+   (`b10333`) e compila `libllamaforge.so` para ARMv9 (`i8mm`/`bf16`/`SVE2`);
+2. job **apk**: roda os testes de unidade e gera o APK debug.
+
+Baixe o APK em **Actions → run mais recente → Artifacts → `forgeai-debug-apk`**.
+
+```bash
+# build local do .so com NDK, igual ao CI (host x86_64):
+FORGE_NDK=$HOME/android-ndk-r28c FORGE_TUNE=v9 ./scripts/build_native.sh
+# APK universal (sem depender da ISA do aparelho):
+FORGE_TUNE=portable ./scripts/build_native.sh
+```
 
 ### No celular (Termux)
+
+> ⚠️ **Se for distribuir o APK para outras pessoas**: o build padrão é
+> otimizado para o CPU deste aparelho (kernels dotprod) e não roda em
+> celulares sem esse suporte. Reconstrua com `FORGE_TUNE=portable` para
+> gerar uma lib portátil — detalhes no [checklist de publicação](PUBLISHING.md).
 
 ```bash
 pkg install git cmake ninja gradle openjdk-21
 # Android SDK: coloque platforms/android-34 (android.jar) em ~/android-sdk/platforms/ 
 # (aapt2, aapt e zipalign vêm do pacote "aapt"/"aapt2" do Termux)
+
+# o aapt2 do Termux precisa ser apontado FORA do repositório (senão o CI quebra):
+mkdir -p ~/.gradle && echo 'android.aapt2FromMavenOverride=/data/data/com.termux/files/usr/bin/aapt2' >> ~/.gradle/gradle.properties
 
 export ANDROID_HOME=$HOME/android-sdk
 ./scripts/build_apk.sh          # debug APK
@@ -66,9 +86,10 @@ export ANDROID_HOME=$HOME/android-sdk
 ```
 
 O script `build_native.sh`:
-1. clona o llama.cpp pinado (`b10333`) se necessário (`LLAMA_CPP_DIR` para apontar um checkout existente)
-2. compila `libllamaforge.so` com o clang do Termux (aarch64/bionic)
-3. copia o `.so` e o `libc++_shared.so` para `app/src/main/jniLibs/arm64-v8a/`
+1. detecta a ISA do aparelho (`FORGE_TUNE=auto`): ARMv9+SVE2+i8mm+bf16 no Snapdragon 8 Elite, `dotprod` em ARMv8.2, baseline nos demais
+2. clona o llama.cpp pinado (`b10333`) se necessário (`LLAMA_CPP_DIR` para apontar um checkout existente)
+3. compila `libllamaforge.so` com NDK (`FORGE_NDK=...`) ou clang do Termux, sempre com page size de 16 KB
+4. copia o `.so` e a `libc++_shared.so` para `app/src/main/jniLibs/arm64-v8a/`
 
 ### No PC (Android Studio / Linux)
 
@@ -79,8 +100,8 @@ ANDROID_HOME=/caminho/sdk ./gradlew assembleDebug
 ```
 
 > Observação: o app usa `compileSdk 34` e o `.so` é produzido apenas para `arm64-v8a`.
-> Em um PC, para builds Vulkan (GPU): `cmake -DFORGE_VULKAN=ON ...` via `build_native.sh`
-> (requer o SDK Vulkan/glslang) e ajuste `GGML_VULKAN`.
+> Para builds Vulkan (GPU): `FORGE_VULKAN=1 ./scripts/build_native.sh`
+> (no NDK o Vulkan já vem; no Termux requer `vulkan-headers` + `shaderc`).
 
 ## Uso
 
@@ -110,9 +131,13 @@ ANDROID_HOME=/caminho/sdk ./gradlew assembleDebug
   `llama_chat_apply_template`; o KV-cache persiste entre turnos; regenerar/limpar
   zera o contexto corretamente.
 
-## Desempenho (medido neste aparelho)
+## Desempenho (medido em aparelho ANTERIOR — Exynos 9820 / Mali-G76)
 
-O build default (`FORGE_ARM_DOTPROD=1`) compila os kernels CPU para
+> ⚠️ **Números históricos, não do Z Fold 8.** O build default agora é
+> `FORGE_TUNE=auto` → `armv9-a+sve2+i8mm+bf16` no Snapdragon 8 Elite Gen 5.
+> A re-medição no Fold 8 faz parte do TD-13 (benchmark in-app).
+
+O build antigo (`FORGE_ARM_DOTPROD=1`) compilava os kernels CPU para
 `armv8.2-a+dotprod` (SDOT/UDOT). Medido com o harness `build/bench.cpp`
 (LFM2.5-1.2B-Q4_K_M, 4 threads):
 
@@ -151,9 +176,11 @@ offloadadas continuam rápidas).
 
 ### Trocar o alvo CPU
 
-- `FORGE_ARM_DOTPROD=0 ./scripts/build_native.sh` → build portátil (roda em
-  qualquer ARMv8, sem kernels dotprod).
-- O `.so` com dotprod **não roda** em CPUs sem suporte (Cortex-A73 e anteriores).
+- `FORGE_TUNE=portable ./scripts/build_native.sh` → build portátil (roda em
+  qualquer ARMv8, sem kernels dotprod/SVE).
+- `FORGE_TUNE=v9` → ARMv9 (`i8mm`/`bf16`/`SVE2`), o caso do Z Fold 8.
+- `FORGE_TUNE=dotprod` → ARMv8.2+dotprod (Snapdragon/Exynos antigos).
+- Um `.so` compilado só roda em CPUs com as extensões usadas no `march`.
 
 ## Licenças
 

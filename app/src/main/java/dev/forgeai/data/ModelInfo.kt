@@ -59,12 +59,26 @@ data class ModelInfo(
         fun visionBase(fileName: String): String {
             var name = HfResolver.baseName(fileName).removeSuffix(".gguf")
             if (name.startsWith("mmproj-", ignoreCase = true)) name = name.drop("mmproj-".length)
-            val quant = HfResolver.quantFromName(name)
-            if (quant != null && name.contains("-$quant", ignoreCase = true)) {
-                name = name.substringBeforeLast("-$quant")
+            // Remove sufixos do fim, repetidamente: quantização (Q8_0, PQ2_0, …)
+            // e marcadores de variante (MTP, DFlash2). Modelos Bonsai 2 usam
+            // nomes compostos como "-PQ2_0-MTP-Q8_0", onde só um strip não basta.
+            while (true) {
+                val quant = HfResolver.quantFromName(name)
+                val stripped = when {
+                    quant != null && name.endsWith("-$quant", ignoreCase = true) ->
+                        name.dropLast(quant.length + 1)
+                    else -> VARIANT_SUFFIXES
+                        .firstOrNull { name.endsWith("-$it", ignoreCase = true) }
+                        ?.let { name.dropLast(it.length + 1) }
+                }
+                if (stripped == null || stripped == name || stripped.isEmpty()) break
+                name = stripped
             }
             return name
         }
+
+        /** Marcadores de variante que não são quantização. */
+        private val VARIANT_SUFFIXES = listOf("MTP", "DFlash2", "DFlash")
 
         fun String.isHashLike(): Boolean = HASH_LIKE.matches(this)
 

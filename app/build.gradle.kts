@@ -45,6 +45,14 @@ android {
         compose = true
     }
 
+    testOptions {
+        unitTests {
+            // Testes de lógica pura (parsers, URLs, shards) rodam na JVM. As
+            // chamadas ao android.jar viram no-op em vez de lançar.
+            isReturnDefaultValues = true
+        }
+    }
+
     packaging {
         jniLibs {
             // Build com FORGE_ALL_VARIANTS (backend CPU dinâmico): o ggml
@@ -69,4 +77,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Testes de unidade puros (JVM). org.json real: os stubs do android.jar não
+    // parseiam nada, e ToolSupport/HfResolver dependem de JSONObject.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }
