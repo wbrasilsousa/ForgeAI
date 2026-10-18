@@ -42,11 +42,11 @@ jobs:
           if [ ! -f "$HOME/llama.cpp/CMakeLists.txt" ]; then
             git clone --depth 1 --branch "$LLAMA_TAG" https://github.com/ggml-org/llama.cpp.git "$HOME/llama.cpp"
           fi
-      - name: Build llama-cli
+      - name: Build llama-simple
         run: |
           cmake -S "$HOME/llama.cpp" -B llbuild -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF -DLLAMA_CURL=OFF -DGGML_NATIVE=ON
-          cmake --build llbuild --target llama-cli -j "$(nproc)"
+          cmake --build llbuild --target llama-simple -j "$(nproc)"
       - name: Cache model
         uses: actions/cache@v4
         with:
@@ -60,13 +60,14 @@ jobs:
             "https://huggingface.co/$HF_REPO/resolve/main/$M"
       - name: Generate (deterministico)
         run: |
+          # llama-simple imprime só a geração no stdout (os logs vão para stderr)
           run() {
-            echo "### prompt: $2"
-            ./llbuild/bin/llama-cli -m "$1" -no-cnv -p "$2" -n 24 --temp 0 --seed 42 -t 4 2>&1 | tail -14
-            echo
+            echo "### prompt: $2" | tee -a q.txt
+            ./llbuild/bin/llama-simple -m "$1" -n 24 "$2" 2>/dev/null | tail -4 | tee -a q.txt
+            echo | tee -a q.txt
           }
-          run models/Ternary-Bonsai-2-2B-Q2_0.gguf "The capital of France is" | tee q.txt
-          run models/Ternary-Bonsai-2-2B-Q2_0.gguf "Explique em uma frase o que e fotossintese." | tee -a q.txt
+          run models/Ternary-Bonsai-2-2B-Q2_0.gguf "The capital of France is"
+          run models/Ternary-Bonsai-2-2B-Q2_0.gguf "Explique em uma frase o que e fotossintese."
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -93,12 +94,11 @@ jobs:
             git clone --depth 1 --branch prism https://github.com/PrismML-Eng/llama.cpp.git "$HOME/llama-fork"
           fi
           git -C "$HOME/llama-fork" log -1 --oneline || true
-      - name: Build llama-cli (fork)
+      - name: Build llama-simple (fork)
         run: |
           cmake -S "$HOME/llama-fork" -B llbuild -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF -DLLAMA_CURL=OFF -DGGML_NATIVE=ON
-          cmake --build llbuild --target llama-cli -j "$(nproc)" || \
-            cmake --build llbuild --target llama-simple -j "$(nproc)"
+          cmake --build llbuild --target llama-simple -j "$(nproc)"
           ls llbuild/bin | head
       - name: Cache models
         uses: actions/cache@v4
@@ -115,12 +115,10 @@ jobs:
           ls -la models
       - name: Generate (mesmos prompts, 3 packings)
         run: |
-          BIN=./llbuild/bin/llama-cli
-          [ -x "$BIN" ] || BIN=./llbuild/bin/llama-simple
           : > q.txt
           for M in models/*.gguf; do
             echo "### $M" | tee -a q.txt
-            $BIN -m "$M" -no-cnv -p "The capital of France is" -n 24 --temp 0 --seed 42 -t 4 2>&1 | tail -10 | tee -a q.txt
+            ./llbuild/bin/llama-simple -m "$M" -n 24 "The capital of France is" 2>/dev/null | tail -4 | tee -a q.txt
             echo | tee -a q.txt
           done
       - uses: actions/upload-artifact@v4
