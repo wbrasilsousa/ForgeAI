@@ -13,7 +13,7 @@
 | Motor | ✅ fork `PrismML-Eng/llama.cpp` tag `prism-b10777-e3de715` (ADR-006) |
 | Medições no Z Fold 8 | ✅ texto **30,9 tok/s** (434 tok) · com imagem 23,4 tok/s · pico **1,3 GB** |
 | Fit badge | ✅ calibrado (pesos + KV híbrido + compute + mmproj + 15%) |
-| Testes | ✅ 70 testes JVM (HfResolver, ToolSupport, ModelInfo, ModelFit, SuggestedModels, `<think>`) |
+| Testes | ✅ 64 testes JVM (HfResolver, ToolSupport, ModelInfo, ModelFit, SuggestedModels, `<think>`) |
 | Visão | 🔬 funciona, mas 2B ternary é fraco em OCR e a codificação esquenta |
 
 ## 2. O que espero do teste de amanhã

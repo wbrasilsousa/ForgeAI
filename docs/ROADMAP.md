@@ -367,7 +367,7 @@ tools, HF) por um benchmark.
 | TD-02 targetSdk | ⏳ pendente | hoje `compileSdk/targetSdk 34`; subir junto com TD-08 (Android 16 ignora lock de orientação em telas grandes) |
 | TD-03 spike Bonsai 2 | ✅ feito → **ADR-006** | bench + A/B de qualidade: upstream gera lixo, fork `prism` gera “Paris”; base trocada p/ fork + `PQ2_0` |
 | TD-05 memória | 🔬 parcial | RSS/VmHWM no fim de cada geração + RAM livre nos Ajustes; falta `onTrimMemory` e amostragem ao vivo |
-| TD-07 testes/CI | ✅ feito | de 0 → 70 testes JVM; CI verde (native + apk) |
+| TD-07 testes/CI | ✅ feito | de 0 → 64 testes JVM; CI verde (native + apk) |
 | TD-18 visão | 🔬 parcial | `image_min_tokens` por modelo (512–2048) + downscale proporcional; falta template nativo, múltiplas imagens e mmproj na GPU |
 | TD-25 fit badge | ✅ feito | `data/ModelFit.kt` (pesos+KV+compute+mmproj+15%) + badge na tela Modelos + `n_head_kv`/`n_kv_layers` no JNI; calibrado com medição real |
 | Sugestões | ✅ trocadas | `SuggestedModels` = Bonsai 2 2B/4B/9B (`PQ2_0` + `mmproj-Q8_0`) |
