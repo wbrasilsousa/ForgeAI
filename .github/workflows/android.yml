@@ -11,7 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  LLAMA_TAG: b10333
+  LLAMA_TAG: prism-b10777-e3de715
+  LLAMA_REPO: https://github.com/PrismML-Eng/llama.cpp.git
   NDK_VERSION: 28.2.13676358 # r28c — official NDK (x86_64 host only)
   # Z Fold 8 / Snapdragon 8 Elite Gen 5. Para um APK universal use FORGE_TUNE=portable.
   FORGE_TUNE: v9
@@ -45,7 +46,7 @@ jobs:
         run: |
           if [ ! -f "$HOME/llama.cpp/CMakeLists.txt" ]; then
             git clone --depth 1 --branch "$LLAMA_TAG" \
-              https://github.com/ggml-org/llama.cpp.git "$HOME/llama.cpp"
+              ${LLAMA_REPO:-https://github.com/PrismML-Eng/llama.cpp.git} "$HOME/llama.cpp"
           fi
           if [ ! -d "$HOME/android-ndk-r28c" ]; then
             curl -sSLo /tmp/ndk.zip https://dl.google.com/android/repository/android-ndk-r28c-linux.zip

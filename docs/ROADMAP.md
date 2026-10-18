@@ -365,10 +365,10 @@ tools, HF) por um benchmark.
 |---|---|---|
 | TD-01 build NDK/16 KB | ✅ feito | `.github/workflows/android.yml` + `build_native.sh` (NDK r28c; `p_align=16384` verificado no artefato) |
 | TD-02 targetSdk | ⏳ pendente | hoje `compileSdk/targetSdk 34`; subir junto com TD-08 (Android 16 ignora lock de orientação em telas grandes) |
-| TD-03 spike Bonsai 2 | ✅ feito (ver §8) | `.github/workflows/spike-bonsai.yml`: `Q2_0` carrega no upstream (`qwen35 2B Q2_0`), visão codifica, bench em ARM medido |
+| TD-03 spike Bonsai 2 | ⚠️ refeito → **ADR-006** | só o bench não bastou: upstream gera lixo; fork `prism` gera “Paris”. Base trocada para o fork + `PQ2_0` |
 | TD-07 testes/CI | ✅ feito | de 0 → 66 testes JVM; CI verde (native + apk) |
 | TD-25 fit badge | ✅ feito | `data/ModelFit.kt` + badge na tela Modelos + `n_head_kv`/`n_kv_layers` no JNI |
-| Sugestões | ✅ trocadas | `SuggestedModels` = Bonsai 2 2B/4B/9B (`Q2_0` + `mmproj-Q8_0`) |
+| Sugestões | ✅ trocadas | `SuggestedModels` = Bonsai 2 2B/4B/9B (`PQ2_0` + `mmproj-Q8_0`) |
 
 Descobertas do caminho (já corrigidas):
 
@@ -409,4 +409,28 @@ Leituras:
    → requisito novo para o TD-18: configurar `image_min_tokens` no `mtmd` e
    revisar a política de downscale (hoje fixa em 1024 px) e o prompt ChatML
    manual do caminho de visão.
+
+### 8.1 Correção: o packing estava errado (ADR-006)
+
+O texto sem sentido **não era** (só) da imagem. O teste A/B de qualidade rodou o
+mesmo arquivo nos dois runtimes:
+
+```
+upstream b10333 + Q2_0   -> lixo ("...Ptmanaطني تعب shy forwards Zoals...")
+fork prism      + Q2_0   -> "The capital of France is Paris."
+fork prism      + PQ2_0  -> "The capital of France is Paris."
+fork prism      + PTQ1_0 -> "The capital of France is Paris."
+```
+
+O upstream carrega o arquivo (tipo `Q2_0` existe) mas decodifica errado — packing
+da PrismML usa grupo 128, o upstream 64. **O `llama-bench` mediu velocidade, não
+sanidade**; foi validação incompleta.
+
+Decisão (ADR-006): base = fork PrismML tag `prism-b10777-e3de715`; packing das
+sugestões = `PQ2_0` (no fork: 19,6 t/s no x86 contra 1,8 t/s do `Q2_0`, e 30 MB
+menor). No aparelho, o `Q2_0` no upstream dava 26,5 tok/s com pico de 1,1 GB —
+velocidade ótima, conteúdo inválido; a próxima medição é com `PQ2_0` no fork.
+
+Visão (TD-18, iniciado): `image_min_tokens = 1024` para arquiteturas `qwen*` no
+`mtmd_context_params` — o campo existe na tag do fork.
 

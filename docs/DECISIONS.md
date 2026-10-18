@@ -7,8 +7,12 @@ contexto, decisão e consequência. O plano executável fica em `docs/ROADMAP.md
 
 ## ADR-001 — Base nativa: upstream `llama.cpp` + packing `Q2_0`
 
-**Data:** 2026-10-17 · **Status:** **validada em 2026-10-18** pelo spike TD-03
-(`qwen35 2B Q2_0` carrega e roda no `b10333`; ARM64: 28,4 t/s prefill, 19,1 t/s decode)
+**Data:** 2026-10-17 · **Status:** ⚠️ **SUBSTITUÍDA pela ADR-006 (2026-10-18)**
+
+Registro histórico: a hipótese era usar o upstream `b10333` com o packing `Q2_0`.
+O spike de *velocidade* parecia confirmar (`qwen35 2B Q2_0` carregava e rodava a
+28/19 t/s em ARM), mas o teste de *qualidade* mostrou texto sem sentido — ver
+ADR-006.
 
 **Contexto.** A família Bonsai 2 (PrismML) publica três packings ternários:
 `PTQ1_0` (tipo ggml 143), `PQ2_0` (tipo 142) e `Q2_0` (tipo 42). Os dois primeiros
@@ -73,7 +77,6 @@ packing no Hub.
 ---
 
 ## ADR-005 — QNN/LiteRT não é caminho crítico
-
 **Data:** 2026-10-17 · **Status:** aceita (revisável pelo TD-21)
 
 **Contexto.** O SoC (SM8850) tem Hexagon e `/dev/fastrpc-cdsp`, mas o vendor não traz
@@ -85,3 +88,33 @@ números de “24,9 ms vs 481,7 ms” são de visão, não de decode de LLM.
 *fast-path* opcional se entregar ≥3× prefill e ≥1,3× decode sem perder features.
 
 **Consequência.** NPU vira pesquisa (TD-21), não bloqueia o roadmap.
+
+---
+
+## ADR-006 — Base nativa: fork PrismML (`prism-b10777-e3de715`) + `PQ2_0`
+
+**Data:** 2026-10-18 · **Status:** aceita (substitui ADR-001)
+
+**Contexto.** O teste A/B de qualidade (`.github/workflows/spike-bonsai-quality.yml`)
+rodou o **mesmo arquivo** nos dois runtimes, com o mesmo prompt:
+
+```
+upstream b10333 + Q2_0   -> "The capital of France isPtmanaطني تعب shy forwards Zoals..."
+fork prism      + Q2_0   -> "The capital of France is Paris."
+fork prism      + PQ2_0  -> "The capital of France is Paris."
+fork prism      + PTQ1_0 -> "The capital of France is Paris."
+```
+
+Era exatamente o sintoma no aparelho (26,5 t/s, texto sem sentido). O upstream
+carrega o arquivo porque o tipo `Q2_0` existe, mas decodifica errado (o packing
+da PrismML usa grupo 128; o upstream, 64). O `llama-bench` mediu velocidade e não
+sanidade — validação incompleta minha.
+
+**Decisão.** Base nativa passa a ser o fork `PrismML-Eng/llama.cpp`, pinado na tag
+`prism-b10777-e3de715` (todas as APIs que o JNI usa existem nela, incluindo
+`image_min_tokens` no `mtmd`). Packing das sugestões: **`PQ2_0`**, que no fork é o
+caminho otimizado (x86: 19,6 t/s vs 1,8 t/s do `Q2_0`) e ainda é menor.
+
+**Consequência.** Passamos a depender de um fork de terceiro para compilar o motor;
+`LLAMA_REPO`/`LLAMA_TAG` ficam parametrizáveis (`build_native.sh` e CI). O
+`PQ2_0`/`PTQ1_0` deixa de ser opcional — é o formato que o app usa.

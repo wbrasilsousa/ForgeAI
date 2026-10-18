@@ -536,6 +536,18 @@ Java_dev_forgeai_LlamaEngine_nativeLoadModel(
             mmp.n_threads    = (int)n_threads;
             mmp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
             mmp.warmup       = false;
+
+            // Qwen-VL (Bonsai 2 é Qwen3.5-VL): com menos de 1024 tokens de
+            // imagem o modelo responde lixo (warning do próprio mtmd). O
+            // default lê o metadata e acaba em ~247; forçamos o mínimo só
+            // para a família qwen (SigLIP2/LFM não usa esse campo).
+            char arch_buf[64] = {0};
+            if (llama_model_meta_val_str(g_model, "general.architecture", arch_buf, sizeof(arch_buf)) > 0) {
+                if (strncmp(arch_buf, "qwen", 4) == 0) {
+                    mmp.image_min_tokens = 1024;
+                    LOGI("mmproj: arch=%s -> image_min_tokens=%d", arch_buf, mmp.image_min_tokens);
+                }
+            }
             g_mctx = mtmd_init_from_file(mmproj, g_model, mmp);
             if (!g_mctx) {
                 LOGE("mmproj init falhou: %s", mmproj);

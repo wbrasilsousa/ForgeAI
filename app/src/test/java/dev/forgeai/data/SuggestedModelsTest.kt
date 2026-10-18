@@ -20,9 +20,9 @@ class SuggestedModelsTest {
     }
 
     @Test
-    fun usesUpstreamSupportedPacking() {
+    fun usesTheOptimizedForkPacking() {
         for (s in SuggestedModels.all) {
-            assertEquals("Q2_0", HfResolver.quantFromName(s.file))
+            assertEquals("PQ2_0", HfResolver.quantFromName(s.file))
         }
     }
 

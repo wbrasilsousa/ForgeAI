@@ -23,7 +23,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ABI="${ABI:-arm64-v8a}"
 MIN_API="${MIN_API:-26}"
-LLAMA_TAG="${LLAMA_TAG:-b10333}"
+LLAMA_REPO="${LLAMA_REPO:-https://github.com/PrismML-Eng/llama.cpp.git}"
+LLAMA_TAG="${LLAMA_TAG:-prism-b10777-e3de715}"
 LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-$HOME/llama.cpp}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 2)}"
 BUILD_DIR="${BUILD_DIR:-$ROOT/build/native}"
@@ -73,7 +74,7 @@ FORGE_VULKAN="${FORGE_VULKAN:-0}"
 
 echo "==> ForgeAI native build"
 echo "    ABI:       $ABI (minSdk $MIN_API)"
-echo "    llama.cpp: $LLAMA_CPP_DIR (tag $LLAMA_TAG)"
+echo "    llama.cpp: $LLAMA_CPP_DIR (repo $LLAMA_REPO, tag $LLAMA_TAG)"
 echo "    jobs:      $JOBS"
 echo "    toolchain: $([ -n "$FORGE_NDK" ] && echo "Android NDK ($FORGE_NDK)" || echo "Termux clang")"
 if [ "$FORGE_ALL_VARIANTS" = "1" ]; then
@@ -94,7 +95,7 @@ if [ ! -f "$LLAMA_CPP_DIR/CMakeLists.txt" ]; then
     echo "==> cloning llama.cpp ($LLAMA_TAG)..."
     mkdir -p "$(dirname "$LLAMA_CPP_DIR")"
     git clone --depth 1 --branch "$LLAMA_TAG" \
-        https://github.com/ggml-org/llama.cpp.git "$LLAMA_CPP_DIR"
+        "$LLAMA_REPO" "$LLAMA_CPP_DIR"
 fi
 
 # --- 2) configure ---------------------------------------------------------
