@@ -306,6 +306,12 @@ fun ChatScreen(
                     )
                     Spacer(Modifier.width(6.dp))
                     StatChip("${stats.tokens} tokens · ${stats.promptTokens} prompt")
+                    // Consumo real de RAM (VmHWM lido no nativo): é o número
+                    // que confirma ou desmente a estimativa do fit badge.
+                    stats.peakRssLabel?.let { rss ->
+                        Spacer(Modifier.width(6.dp))
+                        StatChip("🧠 pico $rss")
+                    }
                 }
             }
         }

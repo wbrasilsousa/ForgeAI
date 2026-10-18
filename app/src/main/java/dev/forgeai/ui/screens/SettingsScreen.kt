@@ -552,7 +552,7 @@ private fun GlobalSettingsPage(vm: AppViewModel, onBack: () -> Unit) {
         SectionHeader("Sistema", Icons.Filled.Info)
         SectionCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                AboutRow("App", "ForgeAI 1.0.0")
+                AboutRow("App", "ForgeAI ${vm.appVersion.ifBlank { "?" }}")
                 AboutRow("Motor", "llama.cpp b10333")
                 val sysInfo by vm.systemInfo.collectAsState()
                 AboutRow("Backend", sysInfo.ifBlank { "…" }, maxLines = 3)
@@ -561,6 +561,15 @@ private fun GlobalSettingsPage(vm: AppViewModel, onBack: () -> Unit) {
                 val (free, used, total) = vm.storageInfo()
                 AboutRow("Modelos", "${vm.models.size} instalados · ${dev.forgeai.data.ModelInfo.formatBytes(used)}")
                 AboutRow("Armazenamento", "livre ${dev.forgeai.data.ModelInfo.formatBytes(free)} / ${dev.forgeai.data.ModelInfo.formatBytes(total)}")
+                val ram = vm.ram
+                if (ram.totalBytes > 0L) {
+                    AboutRow(
+                        "RAM",
+                        "livre ${dev.forgeai.data.ModelInfo.formatBytes(ram.availableBytes)} / " +
+                            dev.forgeai.data.ModelInfo.formatBytes(ram.totalBytes) +
+                            if (ram.lowMemory) " · baixa" else "",
+                    )
+                }
             }
         }
         VSpace(14)

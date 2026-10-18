@@ -83,11 +83,19 @@ object LlamaEngine {
         val tokens: Int,
         val promptTokens: Int,
         val elapsedMs: Double,
-        val tps: Double
+        val tps: Double,
+        /** RSS do processo ao fim da geração (KB) — 0 em builds antigas. */
+        val rssKb: Long = 0L,
+        /** Pico de RSS do processo (VmHWM, KB). */
+        val peakRssKb: Long = 0L,
     ) {
         val finishedByMaxTokens: Boolean get() = status == "max_tokens"
         val finishedByContext: Boolean get() = status == "ctx_full"
         val stopped: Boolean get() = status == "stopped"
+
+        /** Ex.: "3.2 GB" (pico de memória residente). */
+        val peakRssLabel: String?
+            get() = if (peakRssKb > 0) "%.1f GB".format(peakRssKb / 1024.0 / 1024.0) else null
     }
 
     val events = Channel<Event>(Channel.UNLIMITED)
@@ -110,7 +118,9 @@ object LlamaEngine {
                         tokens = o.optInt("tokens", 0),
                         promptTokens = o.optInt("prompt_tokens", 0),
                         elapsedMs = o.optDouble("elapsed_ms", 0.0),
-                        tps = o.optDouble("tps", 0.0)
+                        tps = o.optDouble("tps", 0.0),
+                        rssKb = o.optLong("rss_kb", 0L),
+                        peakRssKb = o.optLong("peak_rss_kb", 0L)
                     )
                 )
             )

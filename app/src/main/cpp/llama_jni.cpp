@@ -207,8 +207,28 @@ static const char * quant_name(int32_t ftype) {
     }
 }
 
-static std::string escape_json(const std::string & s) {
-    std::string out;
+// ---------------------------------------------------------------------------
+// Memória do processo (para o app mostrar consumo real durante a geração)
+// ---------------------------------------------------------------------------
+static long read_status_kb(const char * key) {
+    FILE * f = fopen("/proc/self/status", "r");
+    if (!f) return 0;
+    char line[256];
+    long value = 0;
+    const size_t klen = strlen(key);
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, key, klen) == 0) {
+            const char * p = line + klen;
+            while (*p == ' ' || *p == '\t' || *p == ':') p++;
+            value = atol(p);
+            break;
+        }
+    }
+    fclose(f);
+    return value;
+}
+
+static std::string escape_json(const std::string & s) {    std::string out;
     out.reserve(s.size() + 8);
     for (char c : s) {
         if (c == '"') out += "\\\"";
@@ -959,10 +979,14 @@ static void generation_worker(GenParams p) {
 
         llama_sampler_free(smpl);
 
-        char json[256];
+        // RSS atual e pico (VmHWM) — o app mostra isso junto do tok/s, e é o
+        // número que vale para o fit badge (pesos + KV + buffers de verdade).
+        char json[384];
         snprintf(json, sizeof(json),
-            "{\"status\":\"%s\",\"tokens\":%d,\"prompt_tokens\":%d,\"elapsed_ms\":%.1f,\"tps\":%.2f}",
-            status.c_str(), n_cur, n_prompt, elapsed_s * 1000.0, tps);
+            "{\"status\":\"%s\",\"tokens\":%d,\"prompt_tokens\":%d,\"elapsed_ms\":%.1f,\"tps\":%.2f,"
+            "\"rss_kb\":%ld,\"peak_rss_kb\":%ld}",
+            status.c_str(), n_cur, n_prompt, elapsed_s * 1000.0, tps,
+            read_status_kb("VmRSS"), read_status_kb("VmHWM"));
         emit_complete(env, json);
 
     } while (false);

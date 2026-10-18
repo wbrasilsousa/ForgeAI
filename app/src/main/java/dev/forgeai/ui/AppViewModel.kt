@@ -171,6 +171,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val isGenerating: Boolean get() = engineStatus is EngineStatus.Generating
     val vulkanAvailable: Boolean get() = LlamaEngine.vulkanAvailable()
 
+    /** versionName real do APK (não hardcodar na tela de Ajustes). */
+    val appVersion: String by lazy {
+        runCatching {
+            val app = getApplication<Application>()
+            app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: ""
+        }.getOrDefault("")
+    }
+
     /** Web access efetivamente ativo: ligado em Ajustes E modelo com suporte. */
     val webAccessEnabled: Boolean get() = settings.webAccess && modelSupportsTools
 
